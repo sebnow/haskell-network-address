@@ -1,0 +1,25 @@
+Name:                ip
+Version:             0.1.0
+Synopsis:            IP data structures and textual representation
+Homepage:            http://github.com/sebnow/haskell-ip
+License:             MIT
+License-file:        LICENSE
+Author:              Sebastian Nowicki
+Maintainer:          sebnow@gmail.com
+Category:            Data
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Library
+  -- Modules exported by the library.
+  -- Exposed-modules:     
+  
+  -- Packages needed in order to build this package.
+  -- Build-depends:       
+  
+  -- Modules not exported by this package.
+  -- Other-modules:       
+  
+  -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
+  -- Build-tools:         
+  
