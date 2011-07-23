@@ -44,32 +44,19 @@ showIPv4 (IPv4 ip) = printf "%d.%d.%d.%d" a b c d
           (r3, d) = shift8 ip
           shift8 = (`divMod` 256)
 
-digitsToInt :: [Char] -> Int
-digitsToInt = foldl' (\x y -> x * 10 + y) 0 . map digitToInt
+digitsToWord8 :: [Char] -> Word8
+digitsToWord8 = foldl' (\x y -> x * 10 + y) 0 . map (fromIntegral . digitToInt)
 
-ipv4digit :: P.Parser Int
-ipv4digit = fmap digitsToInt (P.many1 P.digit)
---ipv4digit = do a <- [char '2', 
---               b <- oneOf ['1' ... '5']
---               c <- oneOf ['1' ... '5']
---               return digitsToInt [a, b, c]
---        <|> do a <- char '1'
---               b <- digit
---               c <- digit
---               return digitsToInt [a, b, c]
---        <|> fmap digitsToInt . count 2 digit
---        <|> fmap digitToInt digit
+ipv4digit :: P.Parser Word8
+ipv4digit = fmap digitsToWord8 (P.many1 P.digit)
 
 ipv4parser :: P.Parser IPv4
 ipv4parser = do
     ds <- ipv4digit `P.sepBy1` (P.char '.')
     when (length ds /= 4) (unexpected "IPv4")
     mapM_ (\x -> when (x < 0 || x > 255) (unexpected "IPv4")) ds
-    let [a, b, c, d] = ds
-    return $ toIPv4' (a, b, c, d)
-
-toIPv4' :: (Int, Int, Int, Int) -> IPv4
-toIPv4' (a, b, c, d) = IPv4 . fromIntegral $ shift a 24 + shift b 16 + shift c 8 + d 
+    let [a, b, c, d] = map fromIntegral ds :: [Word32]
+    return . IPv4 $ a `shift` 24 + b `shift` 16 + c `shift` 8 + d
 
 toReadS :: P.Parser a -> P.Parser [(a, String)]
 toReadS p = do

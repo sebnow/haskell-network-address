@@ -8,10 +8,8 @@ import Data.List (intercalate)
 import Data.Word
 
 instance Arbitrary IPv4 where
-    arbitrary = fmap (read . intercalate ".") . fmap (map show) $ vectorOf 4 (arbitrary :: Gen Word8)
---    arbitrary = ipv4 arbitrary arbitrary arbitrary arbitrary
---        where ipv4 :: Word8 -> Word8 -> Word8 -> Word8 -> IPv4
---              ipv4 a b c d = intercalate "." . map show $ [a, b, c, d]
+    arbitrary = fmap (read . intercalate "." . map show) bytes
+        where bytes = vectorOf 4 (arbitrary :: Gen Word8)
 
 tests = [ testGroup "IPv4"
             [ testGroup "Read/Show"
