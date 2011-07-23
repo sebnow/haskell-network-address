@@ -14,10 +14,18 @@ instance Arbitrary IPv4 where
 --              ipv4 a b c d = intercalate "." . map show $ [a, b, c, d]
 
 tests = [ testGroup "IPv4"
-            [ testProperty "Symmetric Read/Show" prop_ipv4_symmetric_readable
+            [ testGroup "Read/Show"
+                [ testProperty "Symmetric Read/Show" prop_ipv4_symmetric_readable
+                ]
+            , testGroup "Binary"
+                [ testProperty "Symmetric to/from" prop_ipv4_symmetric_tofrom
+                ]
             ]
         ]
 
 prop_ipv4_symmetric_readable :: IPv4 -> Bool
 prop_ipv4_symmetric_readable ip = (read . show) ip == id ip
+
+prop_ipv4_symmetric_tofrom :: IPv4 -> Bool
+prop_ipv4_symmetric_tofrom ip = (toIPv4 . fromIPv4) ip == id ip
 
