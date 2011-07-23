@@ -24,8 +24,7 @@ Library
 
   Build-depends:
     base == 4.*,
-    Cabal >= 1.9.2 && < 1.11,
-    parsec == 3.1.*
+    Cabal >= 1.9.2 && < 1.11
 
 test-suite test-package
   Type:           exitcode-stdio-1.0
@@ -33,7 +32,6 @@ test-suite test-package
   Build-depends:
     base == 4.*,
     Cabal >= 1.9.2 && < 1.11,
-    parsec == 3.1.*,
     QuickCheck == 2.4.*,
     test-framework == 0.4.*,
     test-framework-quickcheck2 == 0.2.*
@@ -47,6 +45,5 @@ Executable benchmark
   Build-depends:
     base == 4.*,
     Cabal >= 1.9.2 && < 1.11,
-    criterion == 0.5.0.*,
-    parsec == 3.1.*
+    criterion == 0.5.0.*
 
