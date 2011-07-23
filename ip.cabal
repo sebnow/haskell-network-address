@@ -14,6 +14,10 @@ Source-Repository head
     type:       git
     location:   hit://github.com/sebnow/haskell-ip.git
 
+Flag benchmark
+  Description:  Build benchmarking 
+  Default:      False
+
 Library
   Exposed-modules:
     Data.IP
@@ -24,13 +28,25 @@ Library
     parsec == 3.1.*
 
 test-suite test-package
-  type:           exitcode-stdio-1.0
-  main-is:        Test.hs
-  build-depends:
-      base == 4.*,
-      Cabal >= 1.9.2 && < 1.11,
-      parsec == 3.1.*,
-      QuickCheck == 2.4.*,
-      test-framework == 0.4.*,
-      test-framework-quickcheck2 == 0.2.*
+  Type:           exitcode-stdio-1.0
+  Main-is:        Test.hs
+  Build-depends:
+    base == 4.*,
+    Cabal >= 1.9.2 && < 1.11,
+    parsec == 3.1.*,
+    QuickCheck == 2.4.*,
+    test-framework == 0.4.*,
+    test-framework-quickcheck2 == 0.2.*
+
+Executable benchmark
+  Main-is:          Benchmark.hs
+  if flag(benchmark)
+    Buildable:      True
+  else
+    Buildable:      False
+  Build-depends:
+    base == 4.*,
+    Cabal >= 1.9.2 && < 1.11,
+    criterion == 0.5.0.*,
+    parsec == 3.1.*
 
