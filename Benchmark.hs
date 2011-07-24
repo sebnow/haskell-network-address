@@ -9,8 +9,14 @@ ipv4str n = "192.168." ++ show (n `div` 255)
 
 main = defaultMain
     [ bgroup "IPv4"
-        [ bench "Read" $ whnf readIPv4 (ipv4str 1)
-        , bench "Show" $ whnf show (toIPv4 3232235777)
+        [ bgroup "Parse"
+            [ bench "Read" $ whnf (read :: String -> IPv4) "readIPv4 \"192.168.1.1\""
+            , bench "read" $ whnf readIPv4 "192.168.1.1"
+            ]
+        , bgroup "PrettyPrint"
+            [ bench "Show" $ whnf show (toIPv4 3232235777)
+            , bench "show" $ whnf showIPv4 (toIPv4 3232235777)
+            ]
         ]
     ]
 
