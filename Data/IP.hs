@@ -2,6 +2,8 @@ module Data.IP (
     IPv4,
     toIPv4,
     fromIPv4,
+    showIPv4,
+    readIPv4,
 ) where
 
 import Control.Monad (when)
@@ -18,15 +20,12 @@ data IPv4 = IPv4 !Word32
             deriving (Eq, Ord, Bounded)
 
 instance Show IPv4 where
-    show = showIPv4
+    show ip = "readIPv4 \"" ++ showIPv4 ip ++ "\""
 
 instance Read IPv4 where
-    readsPrec _ s = [(IPv4 $ a' `shift` 24 + b' `shift` 16 + c' `shift` 8 + d', s')]
-        where (a, _:xs1)       = span isDigit s
-              (b, _:xs2)       = span isDigit xs1
-              (c, _:xs3)       = span isDigit xs2
-              (d, s' )         = span isDigit xs3
-              [a', b', c', d'] = map digitsToWord32 [a, b, c, d]
+    readsPrec _ s = case take 8 s of
+        "readIPv4" -> [(readIPv4 . init . tail . dropWhile (/= '"') $ s, "")]
+        otherwise  -> [(undefined, s)]
 
 -- |Return the byte representation of an IPv4 IP address.
 toIPv4 :: Word32 -> IPv4
@@ -46,6 +45,14 @@ showIPv4 (IPv4 ip) = printf "%d.%d.%d.%d" a b c d
           (r3, d) = shift8 ip
           shift8  = (`divMod` 256)
 
-digitsToWord32 :: [Char] -> Word32
-digitsToWord32 = foldl' (\x y -> x * 10 + y) 0 . map (fromIntegral . digitToInt)
+-- |Parse a textual representation of an IPv4 IP address,
+-- e.g. @127.0.0.1@
+readIPv4 :: String -> IPv4
+readIPv4 s = IPv4 . sum . zipWith shift ds $ [24, 16, 8, 0]
+    where (a, _:xs1)     = span isDigit s
+          (b, _:xs2)     = span isDigit xs1
+          (c, _:xs3)     = span isDigit xs2
+          (d, s')        = span isDigit xs3
+          ds             = map digitsToWord32 [a, b, c, d]
+          digitsToWord32 = foldl' ((+) . (10 *)) 0 . map (fromIntegral . digitToInt)
 
