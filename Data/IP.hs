@@ -3,6 +3,7 @@ module Data.IP (
     Address(..),
     Subnet(..),
     IPv4,
+    IPv6,
     IPv4Subnet,
     Mask,
     toIPv4,
@@ -10,16 +11,20 @@ module Data.IP (
     showIPv4,
     readIPv4,
     ipv4Base,
+    toIPv6,
+    fromIPv6,
+    showIPv6,
+    readIPv6,
     showIPv4Subnet,
     readIPv4Subnet,
 ) where
 
 import Control.Monad (when)
 import Data.Bits
-import Data.List (foldl')
 import Data.Char (digitToInt, isDigit)
-import Data.List (foldl')
+import Data.List (foldl', intercalate)
 import Data.Word
+import Numeric (showHex, readHex)
 import Text.Printf (printf)
 
 -- |An IP network mask
@@ -28,6 +33,10 @@ type Mask = Integer
 -- |The abstract data structure to represent an IPv4 address.
 data IPv4 = IPv4 !Word32
             deriving (Eq, Ord, Bounded)
+
+-- |The abstract data structure to represent an IPv6 address.
+data IPv6 = IPv6 !Word64 !Word64
+            deriving (Eq, Ord, Show, Read)
 
 -- |The abstract data structure to represent an IPv4 subnetwork.
 data IPv4Subnet = IPv4Subnet IPv4 Mask deriving (Eq, Ord)
@@ -90,6 +99,62 @@ readIPv4' s = (IPv4 $ sum . zipWith shift ds $ [24, 16, 8, 0], s')
 -- e.g. @127.0.0.1@
 readIPv4 :: String -> IPv4
 readIPv4 = fst . readIPv4'
+
+--
+-- IPv6
+--
+
+instance Address IPv6
+
+instance Show IPv6 where
+    show ip = "readIPv6 \"" ++ showIPv6 ip ++ "\""
+
+instance Read IPv6 where
+    readsPrec _ s = case take 8 s of
+        "readIPv6" -> [(readIPv6 . init . tail . dropWhile (/= '"') $ s, "")]
+        otherwise  -> [(undefined, s)]
+
+-- |Parse a textual representation of an 'IPv6' IP address,
+-- e.g. @1080:0:0:0:8:800:200C:417A@
+readIPv6 :: String -> IPv6
+-- TODO: Support collapsed 0's and alternative syntax, as per RFC3513.
+readIPv6 s = case ipv6octets s of
+    Just os   -> toIPv6 . octetsToInteger . map (fst . head . readHex) $ os
+    otherwise -> error "Data.IP: no parse"
+
+octetsToInteger :: [Word16] -> Integer
+octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
+
+-- |Return a conanical textual representation of an 'IPv6' IP address,
+-- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
+showIPv6 :: IPv6 -> String
+-- TODO: Collapse the longest group of 0's, as per RFC5952.
+showIPv6 = intercalate ":" . map (`showHex` "") . reverse . octets . fromIPv6
+    where octets x = case x `divMod` (2 ^ 16) of
+            (0 , o) -> [o]
+            (x', o) -> o : octets x'
+
+-- |Split an IPv6 into octets (i.e. by ':').
+ipv6octets :: String -> Maybe [String]
+ipv6octets s = case span (/= ':') s of
+    ("", ':':os) -> fmap ((:) "0") (ipv6octets os)
+    ("", "")     -> Just ["0"]
+    (o, ':':os)  -> fmap ((:) o) (ipv6octets os)
+    (o, "")      -> Just [o]
+    otherwise    -> Nothing
+
+-- |Convert the byte representation to an 'IPv6' address.
+toIPv6 :: Integer -> IPv6
+toIPv6 x = IPv6 (fromIntegral a) (fromIntegral b)
+    where ( _, a) = shift64 r1
+          (r1, b) = shift64 x
+          shift64 x = divMod (fromIntegral x) (2 ^ 64)
+
+-- |Return the byte representation of an 'IPv6' IP address.
+fromIPv6 :: IPv6 -> Integer
+fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
+    where a' = fromIntegral a
+          b' = fromIntegral b
 
 --
 -- Subnet
