@@ -10,10 +10,10 @@ ipv4str n = "192.168." ++ show (n `div` 255)
 
 
 ipv4 :: IPv4
-ipv4 = fromInteger 3232235777
+ipv4 = toAddress 3232235777
 
 ipv6 :: IPv6
-ipv6 = fromInteger 42540766452641154071740215577757643572
+ipv6 = toAddress 42540766452641154071740215577757643572
 
 main = defaultMain
     [ bgroup "IPv4"
