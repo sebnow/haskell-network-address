@@ -6,7 +6,6 @@ module Data.IP (
     IPv6(..),
     IPv4Subnet,
     Mask,
-    ipv4Base,
     showIPv4Subnet,
     readIPv4Subnet,
 ) where

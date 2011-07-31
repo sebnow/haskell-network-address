@@ -32,9 +32,6 @@ tests = [ testGroup "IPv4"
             , testGroup "Binary"
                 [ testProperty "Symmetric to/from" prop_ipv4_symmetric_tofrom
                 ]
-            , testGroup "Base"
-                [ testProperty "Base Idempotent" prop_ipv4_base_id
-                ]
             ]
         , testGroup "IPv6"
             [ testGroup "Read/Show"
@@ -63,9 +60,6 @@ prop_ipv4_symmetric_parsable ip = (IP.readAddress . IP.showAddress) ip == id ip
 
 prop_ipv4_symmetric_tofrom :: IP.IPv4 -> Bool
 prop_ipv4_symmetric_tofrom ip = (IP.fromInteger . IP.toInteger) ip == id ip
-
-prop_ipv4_base_id :: IP.IPv4 -> IP.Mask -> Bool
-prop_ipv4_base_id ip mask = prop_fun_id (flip IP.ipv4Base mask) ip
 
 prop_subnet_ipv4_symmetric_readable :: IP.IPv4Subnet -> Bool
 prop_subnet_ipv4_symmetric_readable subnet = (read . show) subnet == id subnet
