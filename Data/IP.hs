@@ -2,19 +2,11 @@
 module Data.IP (
     Address(..),
     Subnet(..),
-    IPv4,
-    IPv6,
+    IPv4(..),
+    IPv6(..),
     IPv4Subnet,
     Mask,
-    toIPv4,
-    fromIPv4,
-    showIPv4,
-    readIPv4,
     ipv4Base,
-    toIPv6,
-    fromIPv6,
-    showIPv6,
-    readIPv6,
     showIPv4Subnet,
     readIPv4Subnet,
 ) where
@@ -32,7 +24,7 @@ type Mask = Integer
 
 -- |The abstract data structure to represent an IPv4 address.
 data IPv4 = IPv4 !Word32
-            deriving (Eq, Ord, Bounded)
+            deriving (Eq, Ord, Bounded, Show, Read)
 
 -- |The abstract data structure to represent an IPv6 address.
 data IPv6 = IPv6 !Word64 !Word64
@@ -41,7 +33,15 @@ data IPv6 = IPv6 !Word64 !Word64
 -- |The abstract data structure to represent an IPv4 subnetwork.
 data IPv4Subnet = IPv4Subnet IPv4 Mask deriving (Eq, Ord)
 
-class (Eq a) => Address a
+class (Eq a) => Address a where
+    -- |Convert the byte representation to an IP 'Address'.
+    fromInteger :: Integer -> a
+    -- |Return the byte representation of an IP 'Address'.
+    toInteger :: a -> Integer
+    -- |Parse a textual representation of an IP 'Address'.
+    readAddress :: String -> a
+    -- |Return a conanical textual representation of an IP 'Address'.
+    showAddress :: a -> String
 
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
@@ -57,15 +57,11 @@ class (Address a) => Subnet s a | s -> a where
 -- IPv4
 --
 
-instance Address IPv4
-
-instance Show IPv4 where
-    show ip = "readIPv4 \"" ++ showIPv4 ip ++ "\""
-
-instance Read IPv4 where
-    readsPrec _ s = case take 8 s of
-        "readIPv4" -> [(readIPv4 . init . tail . dropWhile (/= '"') $ s, "")]
-        otherwise  -> [(undefined, s)]
+instance Address IPv4 where
+    toInteger = fromIntegral . fromIPv4
+    fromInteger = toIPv4 . fromIntegral
+    readAddress = readIPv4
+    showAddress = showIPv4
 
 -- |Return the byte representation of an IPv4 IP address.
 toIPv4 :: Word32 -> IPv4
@@ -104,15 +100,11 @@ readIPv4 = fst . readIPv4'
 -- IPv6
 --
 
-instance Address IPv6
-
-instance Show IPv6 where
-    show ip = "readIPv6 \"" ++ showIPv6 ip ++ "\""
-
-instance Read IPv6 where
-    readsPrec _ s = case take 8 s of
-        "readIPv6" -> [(readIPv6 . init . tail . dropWhile (/= '"') $ s, "")]
-        otherwise  -> [(undefined, s)]
+instance Address IPv6 where
+    toInteger = fromIPv6
+    fromInteger = toIPv6
+    readAddress = readIPv6
+    showAddress = showIPv6
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
