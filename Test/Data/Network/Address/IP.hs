@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Test.Data.IP (tests) where
+module Test.Data.Network.Address.IP (tests) where
 import Data.Bits (shift)
 import Data.List (intercalate)
+import Data.Network.Address.IP
 import Data.Word
 import Numeric (showHex)
-import Data.IP
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck

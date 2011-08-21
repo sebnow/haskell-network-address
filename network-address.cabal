@@ -1,18 +1,21 @@
-Name:                ip
+Name:                network-address
 Version:             0.1.0
 Synopsis:            IP data structures and textual representation
-Homepage:            http://github.com/sebnow/haskell-ip
+Description:         A library for parsing, representing, computing and
+                     transforming network addresses such a IPv4, IPv6
+                     and subnetworks.
+Homepage:            http://github.com/sebnow/haskell-network-address
 License:             MIT
 License-file:        LICENSE
 Author:              Sebastian Nowicki
 Maintainer:          sebnow@gmail.com
-Category:            Data
+Category:            Data, Network
 Build-type:          Simple
 Cabal-version:       >=1.9.2
 
 Source-Repository head
     type:       git
-    location:   hit://github.com/sebnow/haskell-ip.git
+    location:   hit://github.com/sebnow/haskell-network-address.git
 
 Flag benchmark
   Description:  Build benchmarking 
@@ -20,7 +23,8 @@ Flag benchmark
 
 Library
   Exposed-modules:
-    Data.IP
+    Data.Network.Address
+    Data.Network.Address.IP
 
   Build-depends:
     base == 4.*,

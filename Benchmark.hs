@@ -1,7 +1,6 @@
 module Main where
-import Prelude hiding (fromInteger)
 import Criterion.Main
-import Data.IP
+import Data.Network.Address
 
 ipv4str :: Integral a => a -> String
 ipv4str n = "192.168." ++ show (n `div` 255)
