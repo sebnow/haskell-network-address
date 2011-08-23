@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Test.Data.Network.Address.IP (tests) where
 import Data.Bits (shift)
+import Data.Char (isDigit, isHexDigit)
 import Data.List (intercalate)
 import Data.Network.Address.IP
 import Data.Word
@@ -46,6 +47,7 @@ tests = [ testGroup "IPv4"
             [ testGroup "Read/Show"
                 [ testProperty "Symmetric Read/Show" prop_ipv4_symmetric_readable
                 , testProperty "Symmetric readAddress/showAddress" prop_ipv4_symmetric_parsable
+                , testProperty "Invalid readsAddress" prop_ipv4_invalid_reads
                 ]
             , testGroup "Binary"
                 [ testProperty "Symmetric to/from" prop_ipv4_symmetric_tofrom
@@ -58,6 +60,7 @@ tests = [ testGroup "IPv4"
             [ testGroup "Read/Show"
                 [ testProperty "Symmetric Read/Show" prop_ipv4_symmetric_readable
                 , testProperty "Symmetric readAddress/showAddress" prop_ipv6_symmetric_parsable
+                , testProperty "Invalid readsAddress" prop_ipv6_invalid_reads
                 ]
             , testGroup "Binary"
                 [ testProperty "Symmetric to/from" prop_ipv6_symmetric_tofrom
@@ -83,6 +86,10 @@ prop_ipv4_symmetric_parsable ip = (readAddress . showAddress) ip == id ip
 prop_ipv4_symmetric_tofrom :: IPv4 -> Bool
 prop_ipv4_symmetric_tofrom ip = (toAddress . fromAddress) ip == id ip
 
+prop_ipv4_invalid_reads :: IPv4 -> String -> Property
+prop_ipv4_invalid_reads a x = length x > 0 && (not . isDigit . head $ x)
+    ==> (a, x) `elem` (readsAddress $ (showAddress a) ++ x)
+
 prop_subnet_ipv4_symmetric_readable :: IPSubnet IPv4 -> Bool
 prop_subnet_ipv4_symmetric_readable subnet = (readSubnet . showSubnet) subnet == id subnet
 
@@ -95,8 +102,22 @@ prop_ipv6_symmetric_parsable ip = (readAddress . showAddress) ip == id ip
 prop_ipv6_symmetric_tofrom :: IPv6 -> Bool
 prop_ipv6_symmetric_tofrom ip = (toAddress . fromAddress) ip == id ip
 
+prop_ipv6_invalid_reads :: IPv6 -> String -> Property
+prop_ipv6_invalid_reads a x = length x > 0 && (not . isHexDigit . head $ x)
+    ==> (a, x) `elem` (readsAddress $ (showAddress a) ++ x)
+
+prop_subnet_invalid_reads :: (Address a, Subnet s a, Eq s) => s -> String -> Property
+prop_subnet_invalid_reads s x = length x > 0 && (not . isDigit . head $ x)
+    ==> (s, x) `elem` (readsSubnet $ (showSubnet s) ++ x)
+
 prop_subnet_ipv6_symmetric_readable :: IPSubnet IPv6 -> Bool
 prop_subnet_ipv6_symmetric_readable subnet = (readSubnet . showSubnet) subnet == id subnet
+
+prop_subnet_ipv6_invalid_reads :: IPSubnet IPv6 -> String -> Property
+prop_subnet_ipv6_invalid_reads = prop_subnet_invalid_reads
+
+prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 -> String -> Property
+prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
 
 prop_mask_tofrom :: Mask32 -> Bool
 prop_mask_tofrom x = (fromMask m :: Word32) == (fromIntegral . getMask32) x

@@ -34,8 +34,10 @@ module Data.Network.Address.IP (
     IPv6(..),
     IPSubnet(..),
     Mask,
-    toMask,
     fromMask,
+    readAddress,
+    readSubnet,
+    toMask,
 ) where
 
 import Control.Monad (when)
@@ -43,8 +45,10 @@ import Data.Bits
 import Data.Char (digitToInt, isDigit)
 import Data.List (foldl', intercalate)
 import Data.Word
-import Numeric (showHex, readHex)
+import Numeric (showHex)
+import Text.ParserCombinators.ReadP
 import Text.Printf (printf)
+import Text.Read.Lex (readHexP)
 
 -- |The byte representation of an IP network mask.
 type Mask = Integer
@@ -66,7 +70,7 @@ class (Eq a) => Address a where
     -- |Return the byte representation of an IP 'Address'.
     fromAddress :: a -> Integer
     -- |Parse a textual representation of an IP 'Address'.
-    readAddress :: String -> a
+    readsAddress :: ReadS a
     -- |Return a conanical textual representation of an IP 'Address'.
     showAddress :: a -> String
     -- |Apply a mask to an 'Address'.
@@ -78,7 +82,7 @@ class (Eq a) => Address a where
 -- IP subnetworks.
 class (Address a) => Subnet s a | s -> a where
     -- |Parse a textual representation of a 'Subnet'.
-    readSubnet :: String -> s
+    readsSubnet :: ReadS s
     -- |Return a conanical textual representation of a 'Subnet'.
     showSubnet :: s -> String
     -- |Return the first 'IP' in the 'Subnet'.
@@ -89,6 +93,22 @@ class (Address a) => Subnet s a | s -> a where
     member     :: a -> s -> Bool
     member ip s = fromAddress ip .&. netmask s == fromAddress (base s)
 
+-- |@readAddress s@ parses an 'Address'. The 'String' @s@ must be
+-- completely consumed.
+readAddress :: (Address a) => String -> a
+readAddress s = case [x | (x, "") <- readsAddress s] of
+    [ip] -> ip
+    []   -> error "readAddress: no parse"
+    _    -> error "readAddress: ambiguous parse"
+
+-- |@readSubnet s@ parses a 'Subnet'. The 'String' @s@ must be
+-- completely consumed.
+readSubnet :: (Address a, Subnet s a) => String -> s
+readSubnet s = case [x | (x, "") <- readsSubnet s] of
+    [ip] -> ip
+    []   -> error "readSubnet: no parse"
+    _    -> error "readSubnet: ambiguous parse"
+
 --
 -- IPv4
 --
@@ -96,7 +116,7 @@ class (Address a) => Subnet s a | s -> a where
 instance Address IPv4 where
     fromAddress (IPv4 x) = toInteger x
     toAddress   = IPv4 . fromInteger
-    readAddress = readIPv4
+    readsAddress = readsIPv4
     showAddress = showIPv4
 
 -- |Return a conanical textual representation of an IPv4 IP address,
@@ -109,20 +129,27 @@ showIPv4 (IPv4 ip) = printf "%d.%d.%d.%d" a b c d
           (r3, d) = shift8 ip
           shift8  = (`divMod` 256)
 
--- |Parse a textual representation of an 'IPv4' IP address, returning the
--- address and the remainded of the 'String'.
-readIPv4' :: String -> (IPv4, String)
-readIPv4' s = (IPv4 $ sum . zipWith shift ds $ [24, 16, 8, 0], s')
-    where (a, _:xs1)     = span isDigit s
-          (b, _:xs2)     = span isDigit xs1
-          (c, _:xs3)     = span isDigit xs2
-          (d, s')        = span isDigit xs3
-          ds             = map (fromIntegral . digitsToInt) [a, b, c, d] :: [Word32]
+-- |Parse an 'IPv4' IP address.
+readsIPv4 :: ReadS IPv4
+readsIPv4 = readP_to_S readpIPv4
 
--- |Parse a textual representation of an 'IPv4' IP address,
--- e.g. @127.0.0.1@
-readIPv4 :: String -> IPv4
-readIPv4 = fst . readIPv4'
+-- |An IPv4 parser.
+readpIPv4 :: ReadP IPv4
+readpIPv4 = do
+    x  <- ipv4Digit
+    xs <- count 3 (char '.' >> ipv4Digit)
+    return . IPv4 . sum $ zipWith shift (x:xs) [24, 16, 8, 0]
+
+-- |Parse an 8 bit IPv4 digit
+ipv4Digit :: ReadP Word32
+ipv4Digit = do
+    d <- many1 (satisfy isDigit)
+    let x = fromIntegral . digitsToInt $ d
+    if 0 <= x && x < 256 then return x else pfail
+
+-- |Parse an unsigned integer.
+digitsToInt :: String -> Int
+digitsToInt = foldl' ((+) . (10 *)) 0 . map digitToInt
 
 --
 -- IPv6
@@ -131,16 +158,21 @@ readIPv4 = fst . readIPv4'
 instance Address IPv6 where
     fromAddress = fromIPv6
     toAddress   = toIPv6
-    readAddress = readIPv6
+    readsAddress = readsIPv6
     showAddress = showIPv6
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
-readIPv6 :: String -> IPv6
--- TODO: Support collapsed 0's and alternative syntax, as per RFC3513.
-readIPv6 s = case ipv6octets s of
-    Just os   -> toIPv6 . octetsToInteger . map (fst . head . readHex) $ os
-    otherwise -> error "Data.IP: no parse"
+readsIPv6 :: ReadS IPv6
+readsIPv6 = readP_to_S readpIPv6
+
+-- |An IPv6 parser.
+readpIPv6 :: ReadP IPv6
+readpIPv6 = do
+    -- TODO: Support collapsed 0's and alternative syntax, as per RFC3513.
+    o <- readHexP
+    os <- count 7 (char ':' >> readHexP)
+    return . toIPv6 . octetsToInteger $ (o:os)
 
 octetsToInteger :: [Word16] -> Integer
 octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
@@ -149,19 +181,11 @@ octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
 showIPv6 :: IPv6 -> String
 -- TODO: Collapse the longest group of 0's, as per RFC5952.
-showIPv6 = intercalate ":" . map (`showHex` "") . reverse . octets . fromIPv6
-    where octets x = case x `divMod` (2 ^ 16) of
+showIPv6 = intercalate ":" . map (`showHex` "") . fill . reverse . octets . fromIPv6
+    where fill os = replicate (8 - length os) 0 ++ os
+          octets x = case x `divMod` (2 ^ 16) of
             (0 , o) -> [o]
             (x', o) -> o : octets x'
-
--- |Split an IPv6 into octets (i.e. by ':').
-ipv6octets :: String -> Maybe [String]
-ipv6octets s = case span (/= ':') s of
-    ("", ':':os) -> fmap ((:) "0") (ipv6octets os)
-    ("", "")     -> Just ["0"]
-    (o, ':':os)  -> fmap ((:) o) (ipv6octets os)
-    (o, "")      -> Just [o]
-    otherwise    -> Nothing
 
 -- |Convert the byte representation to an 'IPv6' address.
 toIPv6 :: Integer -> IPv6
@@ -182,13 +206,13 @@ fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
 
 instance Subnet (IPSubnet IPv4) IPv4 where
     showSubnet = showIPSubnet
-    readSubnet = readIPSubnet
+    readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
 instance Subnet (IPSubnet IPv6) IPv6 where
     showSubnet = showIPSubnet
-    readSubnet = readIPSubnet
+    readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
@@ -201,12 +225,29 @@ ipSubnet ip m = IPSubnet (maskAddress ip m) m
 showIPSubnet :: (Address a) => IPSubnet a -> String
 showIPSubnet (IPSubnet ip mask) = showAddress ip ++ "/" ++ show (fromMask mask :: Integer)
 
--- |Parse a textual representation of an IP address and subnet.
-readIPSubnet :: (Address a) => String -> IPSubnet a
-readIPSubnet s = ipSubnet ip mask
-    where (x, '/':y) = span (/= '/') s
-          mask       = toMask . digitsToInt $ y
-          ip         = readAddress x
+-- |Parse a textual representation of an IPv4 address and subnet.
+readsIPv4Subnet :: ReadS (IPSubnet IPv4)
+readsIPv4Subnet = readP_to_S readpIPv4Subnet
+
+-- |Return an IPv4 subnet parser.
+readpIPv4Subnet :: ReadP (IPSubnet IPv4)
+readpIPv4Subnet = do
+    ip <- readpIPv4
+    _ <- char '/'
+    m <- fmap (read :: String -> Word32) $ many1 (satisfy isDigit)
+    if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
+
+-- |Parse a textual representation of an IPv6 address and subnet.
+readsIPv6Subnet :: ReadS (IPSubnet IPv6)
+readsIPv6Subnet = readP_to_S readpIPv6Subnet
+
+-- |Return an IPv6 subnet parser.
+readpIPv6Subnet :: ReadP (IPSubnet IPv6)
+readpIPv6Subnet = do
+    ip <- readpIPv6
+    _ <- char '/'
+    m <- fmap (read :: String -> Int) $ many1 (satisfy isDigit)
+    if 0 <= m && m <= 128 then return (ipSubnet ip (toMask m)) else pfail
 
 -- |Convert a decimal mask to binary (e.g. 8 -> 1111.0000.0000.0000).
 toMask :: (Integral a, Bits a, Integral b, Bits b) => a -> b
@@ -222,8 +263,4 @@ timesDivisible :: (Integral a) => a -> a -> a
 timesDivisible a x = timesDivisible' a x 0
     where timesDivisible' a x c | a > 0     = timesDivisible' (a `div` x) x (c + 1)
                                 | otherwise = c
-
--- |Parse an integer.
-digitsToInt :: String -> Int
-digitsToInt = foldl' ((+) . (10 *)) 0 . map digitToInt
 
