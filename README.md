@@ -70,6 +70,17 @@ The test suite can be built and run with Cabal:
     cabal test
 
 
+Benchmarking
+============
+
+A benchmarking tool using Criterion is provided by enabling the
+'benchmark' flag in Cabal:
+
+    cabal configure -fbenchmark
+	cabal build
+	./dist/build/benchmark/benchmark
+
+
 License
 =======
 
