@@ -77,8 +77,8 @@ A benchmarking tool using Criterion is provided by enabling the
 'benchmark' flag in Cabal:
 
     cabal configure -fbenchmark
-	cabal build
-	./dist/build/benchmark/benchmark
+    cabal build
+    ./dist/build/benchmark/benchmark
 
 
 License
