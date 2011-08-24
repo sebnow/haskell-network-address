@@ -136,9 +136,9 @@ readsIPv4 = readP_to_S readpIPv4
 -- |An IPv4 parser.
 readpIPv4 :: ReadP IPv4
 readpIPv4 = do
-    x  <- ipv4Digit
-    xs <- count 3 (char '.' >> ipv4Digit)
-    return . IPv4 . sum $ zipWith shift (x:xs) [24, 16, 8, 0]
+    a <- ipv4Digit
+    (b:c:d:_) <- count 3 (char '.' >> ipv4Digit)
+    return $ IPv4 (a `shift` 24 + b `shift` 16 + c `shift` 8 + d)
 
 -- |Parse an 8 bit IPv4 digit
 ipv4Digit :: ReadP Word32
