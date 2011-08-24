@@ -48,7 +48,7 @@ import Data.Word
 import Numeric (showHex)
 import Text.ParserCombinators.ReadP
 import Text.Printf (printf)
-import Text.Read.Lex (readHexP)
+import Text.Read.Lex (readDecP, readHexP)
 
 -- |The byte representation of an IP network mask.
 type Mask = Integer
@@ -234,7 +234,7 @@ readpIPv4Subnet :: ReadP (IPSubnet IPv4)
 readpIPv4Subnet = do
     ip <- readpIPv4
     _ <- char '/'
-    m <- fmap (read :: String -> Word32) $ many1 (satisfy isDigit)
+    m <- readDecP :: ReadP Word32
     if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
 
 -- |Parse a textual representation of an IPv6 address and subnet.
@@ -246,7 +246,7 @@ readpIPv6Subnet :: ReadP (IPSubnet IPv6)
 readpIPv6Subnet = do
     ip <- readpIPv6
     _ <- char '/'
-    m <- fmap (read :: String -> Int) $ many1 (satisfy isDigit)
+    m <- readDecP :: ReadP Int
     if 0 <= m && m <= 128 then return (ipSubnet ip (toMask m)) else pfail
 
 -- |Convert a decimal mask to binary (e.g. 8 -> 1111.0000.0000.0000).
