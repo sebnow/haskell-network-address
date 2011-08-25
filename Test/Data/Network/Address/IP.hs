@@ -61,6 +61,7 @@ tests = [ testGroup "IPv4"
                 [ testProperty "Symmetric Read/Show" prop_ipv4_symmetric_readable
                 , testProperty "Symmetric readAddress/showAddress" prop_ipv6_symmetric_parsable
                 , testProperty "Invalid readsAddress" prop_ipv6_invalid_reads
+                , testProperty "Parse zero-compressed" prop_ipv6_parse_compressed
                 ]
             , testGroup "Binary"
                 [ testProperty "Symmetric to/from" prop_ipv6_symmetric_tofrom
@@ -73,6 +74,11 @@ tests = [ testGroup "IPv4"
             [ testProperty "Symmetric toMask/fromMask" prop_mask_tofrom
             ]
         ]
+
+readAddressMaybe :: Address a => String -> Maybe a
+readAddressMaybe s = case [x | (x, "") <- readsAddress s] of
+    [ip] -> Just ip
+    _    -> Nothing
 
 prop_fun_id :: (Eq a) => (a -> a) -> a -> Bool
 prop_fun_id f x = f x == f (f x)
@@ -101,6 +107,16 @@ prop_ipv6_symmetric_parsable ip = (readAddress . showAddress) ip == id ip
 
 prop_ipv6_symmetric_tofrom :: IPv6 -> Bool
 prop_ipv6_symmetric_tofrom ip = (toAddress . fromAddress) ip == id ip
+
+prop_ipv6_parse_compressed :: Word16 -> Word16 -> Word8 -> Bool
+prop_ipv6_parse_compressed x y p = readAddressMaybe ip' == Just ip
+    where h = fromIntegral x
+          t = fromIntegral y
+          ip = toAddress ((h `shift` 112) + t) :: IPv6
+          os = showHex h "" : replicate (fromIntegral p `rem` 6) "0" ++ [showHex t ""]
+          ip' = if   length os == 8
+                then intercalate ":" os
+                else intercalate ":" $ (head os ++ ":") : tail os
 
 prop_ipv6_invalid_reads :: IPv6 -> String -> Property
 prop_ipv6_invalid_reads a x = length x > 0 && (not . isHexDigit . head $ x)

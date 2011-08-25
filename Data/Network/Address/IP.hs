@@ -168,11 +168,22 @@ readsIPv6 = readP_to_S readpIPv6
 
 -- |An IPv6 parser.
 readpIPv6 :: ReadP IPv6
-readpIPv6 = do
-    -- TODO: Support collapsed 0's and alternative syntax, as per RFC3513.
-    o <- readHexP
-    os <- count 7 (char ':' >> readHexP)
-    return . toIPv6 . octetsToInteger $ (o:os)
+readpIPv6 = fmap (toAddress . octetsToInteger) $ choice
+    [ readHexP >>= \o -> count 7 (char ':' >> readHexP) >>= \os -> return (o:os)
+    , do
+       head <- many1 (readHexP <<* char ':')
+       tail <- many1 (char ':' >> readHexP)
+       let body = replicate (8 - (length head + length tail)) 0
+           os   = head ++ body ++ tail
+       case length os of
+           8 -> return os
+           _ -> pfail
+    ]
+
+infixl 4 <<*
+-- |Monad version of 'Applicative's '<*' operator.
+(<<*) :: Monad m => m a -> m b -> m a
+a <<* b = a >>= (b >>) . return
 
 octetsToInteger :: [Word16] -> Integer
 octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
