@@ -87,7 +87,7 @@ prop_ipv4_symmetric_readable :: IPv4 -> Bool
 prop_ipv4_symmetric_readable ip = (read . show) ip == id ip
 
 prop_ipv4_symmetric_parsable :: IPv4 -> Bool
-prop_ipv4_symmetric_parsable ip = (readAddress . showAddress) ip == id ip
+prop_ipv4_symmetric_parsable ip = (readAddressMaybe . showAddress) ip == Just ip
 
 prop_ipv4_symmetric_tofrom :: IPv4 -> Bool
 prop_ipv4_symmetric_tofrom ip = (toAddress . fromAddress) ip == id ip
@@ -103,7 +103,7 @@ prop_ipv6_symmetric_readable :: IPv6 -> Bool
 prop_ipv6_symmetric_readable ip = (read . show) ip == id ip
 
 prop_ipv6_symmetric_parsable :: IPv6 -> Bool
-prop_ipv6_symmetric_parsable ip = (readAddress . showAddress) ip == id ip
+prop_ipv6_symmetric_parsable ip = (readAddressMaybe . showAddress) ip == Just ip
 
 prop_ipv6_symmetric_tofrom :: IPv6 -> Bool
 prop_ipv6_symmetric_tofrom ip = (toAddress . fromAddress) ip == id ip
