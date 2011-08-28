@@ -2,7 +2,7 @@
 module Test.Data.Network.Address.IP (tests) where
 import Data.Bits (shift)
 import Data.Char (isDigit, isHexDigit)
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 import Data.Network.Address.IP
 import Data.Word
 import Numeric (showHex)
@@ -62,6 +62,7 @@ tests = [ testGroup "IPv4"
                 , testProperty "Symmetric readAddress/showAddress" prop_ipv6_symmetric_parsable
                 , testProperty "Invalid readsAddress" prop_ipv6_invalid_reads
                 , testProperty "Parse zero-compressed" prop_ipv6_parse_compressed
+                , testProperty "Zero-compressed once" prop_ipv6_compressed_once
                 ]
             , testGroup "Binary"
                 [ testProperty "Symmetric to/from" prop_ipv6_symmetric_tofrom
@@ -79,6 +80,14 @@ readAddressMaybe :: Address a => String -> Maybe a
 readAddressMaybe s = case [x | (x, "") <- readsAddress s] of
     [ip] -> Just ip
     _    -> Nothing
+
+-- |Returns the indices of all sublists.
+elemsIndices :: Eq a => [a] -> [a] -> [Int]
+elemsIndices needle xs = reverse $ go needle xs 0 []
+    where go needle [] i is = is
+          go needle xs i is = case needle `isPrefixOf` xs of
+            True  -> go needle (drop (length needle) xs) (i + 1) (i:is)
+            False -> go needle (drop 1 xs) (i + 1) is
 
 prop_fun_id :: (Eq a) => (a -> a) -> a -> Bool
 prop_fun_id f x = f x == f (f x)
@@ -118,6 +127,9 @@ prop_ipv6_parse_compressed x y p = readAddressMaybe ip' == Just ip
                 then intercalate ":" os
                 else intercalate ":" $ (head os ++ ":") : tail os
 
+prop_ipv6_compressed_once :: IPv6 -> Bool
+prop_ipv6_compressed_once ip = length ("::" `elemsIndices` (showAddress ip)) == 1
+
 prop_ipv6_invalid_reads :: IPv6 -> String -> Property
 prop_ipv6_invalid_reads a x = length x > 0 && (not . isHexDigit . head $ x)
     ==> (a, x) `elem` (readsAddress $ (showAddress a) ++ x)
@@ -138,4 +150,5 @@ prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
 prop_mask_tofrom :: Mask32 -> Bool
 prop_mask_tofrom x = (fromMask m :: Word32) == (fromIntegral . getMask32) x
     where m = (toMask . getMask32) x :: Word32
+
 

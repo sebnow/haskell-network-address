@@ -43,7 +43,8 @@ module Data.Network.Address.IP (
 import Control.Monad (when)
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
-import Data.List (foldl', intercalate)
+import Data.List (foldl', intercalate, findIndex, groupBy)
+import Data.Maybe (fromJust)
 import Data.Word
 import Numeric (showHex)
 import Text.ParserCombinators.ReadP
@@ -178,6 +179,9 @@ readpIPv6 = fmap (toAddress . octetsToInteger) $ choice
        case length os of
            8 -> return os
            _ -> pfail
+    , char ':' >> many1 (char ':' >> readHexP)
+    , string "::" >> return [0]
+    , many1 (readHexP <<* char ':') <<* char ':'
     ]
 
 infixl 4 <<*
@@ -191,12 +195,29 @@ octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 -- |Return a conanical textual representation of an 'IPv6' IP address,
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
 showIPv6 :: IPv6 -> String
--- TODO: Collapse the longest group of 0's, as per RFC5952.
-showIPv6 = intercalate ":" . map (`showHex` "") . fill . reverse . octets . fromIPv6
+showIPv6 ip = intercalate ":" fields
+    where fields  = if   m == 1
+                    then map (`showHex` "") octets
+                    else (init ++ [""] ++ tail)
+          init    = if   i == 0
+                    then [""]
+                    else map (`showHex` "") . concat . take i $ grouped
+          tail    = if   i == (length lengths - 1)
+                    then [""]
+                    else map (`showHex` "") . concat . drop (i + 1) $ grouped
+          i       = fromJust $ findIndex (== m) lengths
+          m       = maximum lengths
+          lengths = map length grouped
+          grouped = groupBy (\x y -> x == 0 && y == 0) octets
+          octets  = toIPv6Octets . fromAddress $ ip
+
+-- |Split a number into 'IPv6' octets.
+toIPv6Octets :: Integral a => a -> [a]
+toIPv6Octets = fill . reverse . go
     where fill os = replicate (8 - length os) 0 ++ os
-          octets x = case x `divMod` (2 ^ 16) of
-            (0 , o) -> [o]
-            (x', o) -> o : octets x'
+          go x    = case x `divMod` (2 ^ 16) of
+            (0, o) -> [o]
+            (x', o) -> o : go x'
 
 -- |Convert the byte representation to an 'IPv6' address.
 toIPv6 :: Integer -> IPv6
