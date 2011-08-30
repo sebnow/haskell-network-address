@@ -179,7 +179,10 @@ readpIPv6 = fmap (toAddress . octetsToInteger) $ choice
        case length os of
            8 -> return os
            _ -> pfail
-    , char ':' >> many1 (char ':' >> readHexP)
+    , char ':' >> many1 (char ':' >> readHexP) >>= \xs ->
+        if   length xs <= 8
+        then return xs
+        else pfail
     , string "::" >> return [0]
     , many1 (readHexP <<* char ':') <<* char ':' >>= \xs ->
         if   length xs > 8
