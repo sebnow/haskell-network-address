@@ -1,5 +1,5 @@
 Name:                network-address
-Version:             0.1.0
+Version:             0.2.0
 Synopsis:            IP data structures and textual representation
 Description:         A library for parsing, representing, computing and
                      transforming network addresses such a IPv4, IPv6

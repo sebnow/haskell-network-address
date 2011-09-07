@@ -15,20 +15,27 @@ Usage
     *Data.Network.Address> let ip = readAddress "127.0.0.1" :: IPv4
     *Data.Network.Address> showAddress ip
     "127.0.0.1"
-    *Data.Network.Address> let subnet = readSubnet "192.168.1.42/8" ::
-    IPSubnet IPv4
+    *Data.Network.Address> let subnet = readSubnet "192.168.1.42/8" :: IPSubnet IPv4
     *Data.Network.Address> subnet
     IPSubnet (IPv4 3232235776) (-256)
     *Data.Network.Address> showSubnet subnet
     "192.168.1.0/8"
     *Data.Network.Address> showAddress . base $ subnet
     "192.168.1.0"
-    *Data.Network.Address> (readAddress "192.168.1.5" :: IPv4) `member`
-    subnet
+    *Data.Network.Address> (readAddress "192.168.1.5" :: IPv4) `member` subnet
     True
-    *Data.Network.Address> (readAddress "192.168.2.5" :: IPv4) `member`
-    subnet
+    *Data.Network.Address> (readAddress "192.168.2.5" :: IPv4) `member` subnet
     False
+    *Data.Network.Address> let ip = readAddress "2001:db8:0:0:0::1" :: IPv6
+    *Data.Network.Address> ip
+    IPv6 2306139568115548160 1
+    *Data.Network.Address> showAddress ip
+    "2001:db8::1"
+    *Data.Network.Address> let subnet = readSubnet "2001:db8::1/56" :: IPSubnet IPv6
+    *Data.Network.Address> showSubnet subnet
+    "2001:db8::/56"
+    *Data.Network.Address> ip `member` subnet
+    True
 
 
 Installation
@@ -79,6 +86,12 @@ A benchmarking tool using Criterion is provided by enabling the
     cabal configure -fbenchmark
     cabal build
     ./dist/build/benchmark/benchmark
+
+
+TODO
+====
+
+ * Support for IPv4 embedded in IPv6 as per RFC 4291 Section 2.2.
 
 
 License
