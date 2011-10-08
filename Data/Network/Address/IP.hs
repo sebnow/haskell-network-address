@@ -104,7 +104,7 @@ readAddress s = case [x | (x, "") <- readsAddress s] of
 
 -- |@readSubnet s@ parses a 'Subnet'. The 'String' @s@ must be
 -- completely consumed.
-readSubnet :: (Address a, Subnet s a) => String -> s
+readSubnet :: (Subnet s a) => String -> s
 readSubnet s = case [x | (x, "") <- readsSubnet s] of
     [ip] -> ip
     []   -> error "readSubnet: no parse"
