@@ -62,7 +62,7 @@ data IPv4 = IPv4 !Word32
 data IPv6 = IPv6 !Word64 !Word64
             deriving (Eq, Ord, Show, Read)
 
--- |The abstract data structure to represent an IPv4 subnetwork.
+-- |The abstract data structure to represent an IP subnetwork.
 data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
 
 class (Eq a) => Address a where
@@ -169,7 +169,7 @@ readsIPv6 = readP_to_S readpIPv6
 
 -- |An IPv6 parser.
 readpIPv6 :: ReadP IPv6
-readpIPv6 = fmap (toAddress . octetsToInteger) $ choice
+readpIPv6 = fmap (toAddress . word16sToInteger) $ choice
     [ readHexP >>= \o -> count 7 (char ':' >> readHexP) >>= \os -> return (o:os)
     , do
        head <- many1 (readHexP <<* char ':')
@@ -195,15 +195,15 @@ infixl 4 <<*
 (<<*) :: Monad m => m a -> m b -> m a
 a <<* b = a >>= (b >>) . return
 
-octetsToInteger :: [Word16] -> Integer
-octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
+word16sToInteger :: [Word16] -> Integer
+word16sToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 
 -- |Return a conanical textual representation of an 'IPv6' IP address,
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
 showIPv6 :: IPv6 -> String
 showIPv6 ip = intercalate ":" fields
     where fields  = if   m == 1
-                    then map (`showHex` "") octets
+                    then map (`showHex` "") word16s
                     else (init ++ [""] ++ tail)
           init    = if   i == 0
                     then [""]
@@ -214,10 +214,10 @@ showIPv6 ip = intercalate ":" fields
           i       = fromJust $ findIndex (== m) lengths
           m       = maximum lengths
           lengths = map length grouped
-          grouped = groupBy (\x y -> x == 0 && y == 0) octets
-          octets  = toIPv6Octets . fromAddress $ ip
+          grouped = groupBy (\x y -> x == 0 && y == 0) word16s
+          word16s  = toIPv6Octets . fromAddress $ ip
 
--- |Split a number into 'IPv6' octets.
+-- |Split a number into 'IPv6' word16s.
 toIPv6Octets :: Integral a => a -> [a]
 toIPv6Octets = fill . reverse . go
     where fill os = replicate (8 - length os) 0 ++ os
