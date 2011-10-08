@@ -44,10 +44,10 @@ Executable benchmark
   Main-is:          Benchmark.hs
   if flag(benchmark)
     Buildable:      True
+    Build-depends:
+      base == 4.*,
+      Cabal >= 1.9.2 && < 1.11,
+      criterion == 0.5.0.*
   else
     Buildable:      False
-  Build-depends:
-    base == 4.*,
-    Cabal >= 1.9.2 && < 1.11,
-    criterion == 0.5.0.*
 
