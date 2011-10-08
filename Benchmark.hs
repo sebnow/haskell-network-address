@@ -10,7 +10,7 @@ instance NFData IPv4 where
 instance NFData IPv6 where
     rnf (IPv6 a b) = rnf a `seq` rnf b
 
-instance (Address a, NFData a) => NFData (IPSubnet a) where
+instance (IPAddress a, NFData a) => NFData (IPSubnet a) where
     rnf (IPSubnet ip m) = rnf ip `seq` rnf m
 
 ipv4str :: Integral a => a -> String
@@ -25,9 +25,9 @@ main =
         ipv6 :: IPv6
         !ipv6 = toAddress 42540766452641154071740215577757643572
         ipv4subnet :: IPSubnet IPv4
-        !ipv4subnet = IPSubnet ipv4 (toMask (8 :: Int))
+        !ipv4subnet = ipSubnet ipv4 8
         ipv6subnet :: IPSubnet IPv6
-        !ipv6subnet = IPSubnet ipv6 (toMask (56 :: Integer))
+        !ipv6subnet = ipSubnet ipv6 56
     in  defaultMain
     [ bgroup "IPv4"
         [ bench "readAddress" $ nf (readAddress :: String -> IPv4) "192.168.1.1"
