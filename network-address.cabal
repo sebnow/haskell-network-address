@@ -11,6 +11,7 @@ Author:              Sebastian Nowicki
 Maintainer:          sebnow@gmail.com
 Category:            Data, Network
 Build-type:          Simple
+Extra-source-files:  README.md
 Cabal-version:       >=1.9.2
 
 Source-Repository head
@@ -33,6 +34,8 @@ Library
 test-suite test-package
   Type:           exitcode-stdio-1.0
   Main-is:        Test.hs
+  Other-modules:
+    Test.Data.Network.Address.IP
   Build-depends:
     base == 4.*,
     Cabal >= 1.9.2 && < 1.11,
