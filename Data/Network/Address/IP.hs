@@ -35,8 +35,6 @@ module Data.Network.Address.IP (
     IPSubnet(..),
     Mask,
     fromMask,
-    readAddress,
-    readSubnet,
     toMask,
 ) where
 
@@ -48,7 +46,6 @@ import Data.Maybe (fromJust)
 import Data.Word
 import Numeric (showHex)
 import Text.ParserCombinators.ReadP
-import Text.Printf (printf)
 import Text.Read.Lex (readDecP, readHexP)
 
 -- |The byte representation of an IP network mask.
@@ -56,24 +53,20 @@ type Mask = Integer
 
 -- |The abstract data structure to represent an IPv4 address.
 data IPv4 = IPv4 !Word32
-            deriving (Eq, Ord, Bounded, Show, Read)
+            deriving (Eq, Ord, Bounded)
 
 -- |The abstract data structure to represent an IPv6 address.
 data IPv6 = IPv6 !Word64 !Word64
-            deriving (Eq, Ord, Show, Read)
+            deriving (Eq, Ord)
 
 -- |The abstract data structure to represent an IP subnetwork.
-data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
+data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord)
 
-class (Eq a) => Address a where
+class (Eq a, Read a, Show a) => Address a where
     -- |Convert the byte representation to an IP 'Address'.
     toAddress   :: Integer -> a
     -- |Return the byte representation of an IP 'Address'.
     fromAddress :: a -> Integer
-    -- |Parse a textual representation of an IP 'Address'.
-    readsAddress :: ReadS a
-    -- |Return a conanical textual representation of an IP 'Address'.
-    showAddress :: a -> String
     -- |Apply a mask to an 'Address'.
     maskAddress :: (Bits b, Integral b) => a -> b -> a
     maskAddress ip mask = toAddress . (\x -> x `div` (2^n) * 2^n) . fromAddress $ ip
@@ -81,11 +74,7 @@ class (Eq a) => Address a where
 
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
-class (Address a) => Subnet s a | s -> a where
-    -- |Parse a textual representation of a 'Subnet'.
-    readsSubnet :: ReadS s
-    -- |Return a conanical textual representation of a 'Subnet'.
-    showSubnet :: s -> String
+class (Read s, Show s, Address a) => Subnet s a | s -> a where
     -- |Return the first 'IP' in the 'Subnet'.
     base       :: s -> a
     -- |Return an binary representation of the subnet mask.
@@ -94,31 +83,19 @@ class (Address a) => Subnet s a | s -> a where
     member     :: a -> s -> Bool
     member ip s = fromAddress ip .&. netmask s == fromAddress (base s)
 
--- |@readAddress s@ parses an 'Address'. The 'String' @s@ must be
--- completely consumed.
-readAddress :: (Address a) => String -> a
-readAddress s = case [x | (x, "") <- readsAddress s] of
-    [ip] -> ip
-    []   -> error "readAddress: no parse"
-    _    -> error "readAddress: ambiguous parse"
-
--- |@readSubnet s@ parses a 'Subnet'. The 'String' @s@ must be
--- completely consumed.
-readSubnet :: (Subnet s a) => String -> s
-readSubnet s = case [x | (x, "") <- readsSubnet s] of
-    [ip] -> ip
-    []   -> error "readSubnet: no parse"
-    _    -> error "readSubnet: ambiguous parse"
-
 --
 -- IPv4
 --
 
+instance Show IPv4 where
+    showsPrec _ = showsIPv4
+
+instance Read IPv4 where
+    readsPrec _ = readP_to_S readpIPv4
+
 instance Address IPv4 where
     fromAddress (IPv4 x) = toInteger x
     toAddress   = IPv4 . fromInteger
-    readsAddress = readsIPv4
-    showAddress ip = showsIPv4 ip ""
 
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
@@ -132,10 +109,6 @@ showsIPv4 (IPv4 ip) = shows a
           (r2, c) = shift8 r3
           (r3, d) = shift8 ip
           shift8  = (`divMod` 256)
-
--- |Parse an 'IPv4' IP address.
-readsIPv4 :: ReadS IPv4
-readsIPv4 = readP_to_S readpIPv4
 
 -- |An IPv4 parser.
 readpIPv4 :: ReadP IPv4
@@ -159,16 +132,15 @@ digitsToInt = foldl' ((+) . (10 *)) 0 . map digitToInt
 -- IPv6
 --
 
+instance Show IPv6 where
+    showsPrec _ = showsIPv6
+
+instance Read IPv6 where
+    readsPrec _ = readP_to_S readpIPv6
+
 instance Address IPv6 where
     fromAddress = fromIPv6
     toAddress   = toIPv6
-    readsAddress = readsIPv6
-    showAddress ip = showsIPv6 ip ""
-
--- |Parse a textual representation of an 'IPv6' IP address,
--- e.g. @1080:0:0:0:8:800:200C:417A@
-readsIPv6 :: ReadS IPv6
-readsIPv6 = readP_to_S readpIPv6
 
 -- |An IPv6 parser.
 readpIPv6 :: ReadP IPv6
@@ -253,15 +225,23 @@ fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
 -- Subnet
 --
 
+instance Show (IPSubnet IPv4) where
+    showsPrec _ = showsIPSubnet
+
+instance Read (IPSubnet IPv4) where
+    readsPrec _ = readP_to_S readpIPv4Subnet
+
 instance Subnet (IPSubnet IPv4) IPv4 where
-    showSubnet s = showsIPv4Subnet s ""
-    readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
+instance Show (IPSubnet IPv6) where
+    showsPrec _ = showsIPSubnet
+
+instance Read (IPSubnet IPv6) where
+    readsPrec _ = readP_to_S readpIPv6Subnet
+
 instance Subnet (IPSubnet IPv6) IPv6 where
-    showSubnet s = showsIPv6Subnet s ""
-    readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
@@ -269,15 +249,11 @@ instance Subnet (IPSubnet IPv6) IPv6 where
 ipSubnet :: (Address a) => a -> Mask -> IPSubnet a
 ipSubnet ip m = IPSubnet (maskAddress ip m) m
 
--- |Return a conanical textual representation of an IPv4 'Address' and
+-- |Return a conanical textual representation of an IP 'Address' and
 -- 'Subnet'.
-showsIPv4Subnet :: IPSubnet IPv4 -> ShowS
-showsIPv4Subnet (IPSubnet ip m) = showsIPv4 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
-
--- |Parse a textual representation of an IPv4 address and subnet.
-readsIPv4Subnet :: ReadS (IPSubnet IPv4)
-readsIPv4Subnet = readP_to_S readpIPv4Subnet
+showsIPSubnet :: (Address a, Show a) => IPSubnet a -> ShowS
+showsIPSubnet (IPSubnet ip mask) = shows ip . showChar '/' . shows n
+    where n = (fromMask mask :: Integer)
 
 -- |Return an IPv4 subnet parser.
 readpIPv4Subnet :: ReadP (IPSubnet IPv4)
@@ -286,16 +262,6 @@ readpIPv4Subnet = do
     _ <- char '/'
     m <- readDecP :: ReadP Word32
     if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
-
--- |Return a conanical textual representation of an IPv6 'Address' and
--- 'Subnet'.
-showsIPv6Subnet :: IPSubnet IPv6 -> ShowS
-showsIPv6Subnet (IPSubnet ip m) = showsIPv6 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
-
--- |Parse a textual representation of an IPv6 address and subnet.
-readsIPv6Subnet :: ReadS (IPSubnet IPv6)
-readsIPv6Subnet = readP_to_S readpIPv6Subnet
 
 -- |Return an IPv6 subnet parser.
 readpIPv6Subnet :: ReadP (IPSubnet IPv6)
