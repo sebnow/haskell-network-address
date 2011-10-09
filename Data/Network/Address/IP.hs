@@ -118,12 +118,15 @@ instance Address IPv4 where
     fromAddress (IPv4 x) = toInteger x
     toAddress   = IPv4 . fromInteger
     readsAddress = readsIPv4
-    showAddress = showIPv4
+    showAddress ip = showsIPv4 ip ""
 
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
-showIPv4 :: IPv4 -> String
-showIPv4 (IPv4 ip) = printf "%d.%d.%d.%d" a b c d
+showsIPv4 :: IPv4 -> ShowS
+showsIPv4 (IPv4 ip) = shows a
+     . showChar '.' . shows b
+     . showChar '.' . shows c
+     . showChar '.' . shows d
     where ( _, a) = shift8 r1
           (r1, b) = shift8 r2
           (r2, c) = shift8 r3
@@ -160,7 +163,7 @@ instance Address IPv6 where
     fromAddress = fromIPv6
     toAddress   = toIPv6
     readsAddress = readsIPv6
-    showAddress = showIPv6
+    showAddress ip = showsIPv6 ip ""
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
@@ -200,22 +203,27 @@ word16sToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 
 -- |Return a conanical textual representation of an 'IPv6' IP address,
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
-showIPv6 :: IPv6 -> String
-showIPv6 ip = intercalate ":" fields
+showsIPv6 :: IPv6 -> ShowS
+showsIPv6 ip = intercalates (showChar ':') fields
     where fields  = if   m == 1
-                    then map (`showHex` "") word16s
-                    else (init ++ [""] ++ tail)
-          init    = if   i == 0
-                    then [""]
-                    else map (`showHex` "") . concat . take i $ grouped
-          tail    = if   i == (length lengths - 1)
-                    then [""]
-                    else map (`showHex` "") . concat . drop (i + 1) $ grouped
-          i       = fromJust $ findIndex (== m) lengths
+                    then map showHex word16s
+                    else (init ++ [showString ""] ++ tail)
+          init    = if   zeroIdx == 0
+                    then [showString ""]
+                    else map showHex . concat . take zeroIdx $ grouped
+          tail    = if   zeroIdx == (length lengths - 1)
+                    then [showString ""]
+                    else map showHex . concat . drop (zeroIdx + 1) $ grouped
+          zeroIdx = fromJust $ findIndex (== m) lengths
           m       = maximum lengths
           lengths = map length grouped
           grouped = groupBy (\x y -> x == 0 && y == 0) word16s
           word16s  = toIPv6Octets . fromAddress $ ip
+
+-- |Same as 'intercalate' but for 'ShowS' as opposed to plain strings.
+intercalates :: ShowS -> [ShowS] -> ShowS
+intercalates _ []     = showString ""
+intercalates d (x:xs) = foldl (\s x -> s . d . x) x xs
 
 -- |Split a number into 'IPv6' word16s.
 toIPv6Octets :: Integral a => a -> [a]
@@ -243,13 +251,13 @@ fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
 --
 
 instance Subnet (IPSubnet IPv4) IPv4 where
-    showSubnet = showIPSubnet
+    showSubnet s = showsIPv4Subnet s ""
     readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
 instance Subnet (IPSubnet IPv6) IPv6 where
-    showSubnet = showIPSubnet
+    showSubnet s = showsIPv6Subnet s ""
     readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
@@ -258,10 +266,11 @@ instance Subnet (IPSubnet IPv6) IPv6 where
 ipSubnet :: (Address a) => a -> Mask -> IPSubnet a
 ipSubnet ip m = IPSubnet (maskAddress ip m) m
 
--- |Return a conanical textual representation of an IP 'Address' and
+-- |Return a conanical textual representation of an IPv4 'Address' and
 -- 'Subnet'.
-showIPSubnet :: (Address a) => IPSubnet a -> String
-showIPSubnet (IPSubnet ip mask) = showAddress ip ++ "/" ++ show (fromMask mask :: Integer)
+showsIPv4Subnet :: IPSubnet IPv4 -> ShowS
+showsIPv4Subnet (IPSubnet ip m) = showsIPv4 ip . showChar '/' . shows n
+    where n = fromMask m :: Integer
 
 -- |Parse a textual representation of an IPv4 address and subnet.
 readsIPv4Subnet :: ReadS (IPSubnet IPv4)
@@ -274,6 +283,12 @@ readpIPv4Subnet = do
     _ <- char '/'
     m <- readDecP :: ReadP Word32
     if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
+
+-- |Return a conanical textual representation of an IPv6 'Address' and
+-- 'Subnet'.
+showsIPv6Subnet :: IPSubnet IPv6 -> ShowS
+showsIPv6Subnet (IPSubnet ip m) = showsIPv6 ip . showChar '/' . shows n
+    where n = fromMask m :: Integer
 
 -- |Parse a textual representation of an IPv6 address and subnet.
 readsIPv6Subnet :: ReadS (IPSubnet IPv6)
