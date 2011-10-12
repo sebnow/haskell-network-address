@@ -43,7 +43,7 @@ module Data.Network.Address.IP (
 import Control.Monad (when)
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
-import Data.List (foldl', intercalate, findIndex, groupBy)
+import Data.List (foldl', findIndex, isSuffixOf, scanl)
 import Data.Maybe (fromJust)
 import Data.Word
 import Numeric (showHex)
@@ -204,26 +204,29 @@ word16sToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 -- |Return a conanical textual representation of an 'IPv6' IP address,
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
 showsIPv6 :: IPv6 -> ShowS
-showsIPv6 ip = intercalates (showChar ':') fields
-    where fields  = if   m == 1
-                    then map showHex word16s
-                    else (init ++ [showString ""] ++ tail)
-          init    = if   zeroIdx == 0
-                    then [showString ""]
-                    else map showHex . concat . take zeroIdx $ grouped
-          tail    = if   zeroIdx == (length lengths - 1)
-                    then [showString ""]
-                    else map showHex . concat . drop (zeroIdx + 1) $ grouped
-          zeroIdx = fromJust $ findIndex (== m) lengths
-          m       = maximum lengths
-          lengths = map length grouped
-          grouped = groupBy (\x y -> x == 0 && y == 0) word16s
-          word16s  = toIPv6Octets . fromAddress $ ip
+showsIPv6 ip | fromAddress ip == 0 = showString "::"
+             | otherwise           = case indexOfLongestSequence 0 word16s of
+    Nothing  -> foldl' (\s x -> s . showChar ':' . showHex x) (showHex field) fields
+    Just idx -> if   idx == 0
+                then fst3 $ foldl' (collapse idx) (showString "", 0, False) word16s
+                else fst3 (foldl' (collapse idx) (showHex field, 1, False) fields) .
+                    if   replicate (length word16s - idx) 0 `isSuffixOf` word16s
+                    then showChar ':'
+                    else id
+    where word16s@(field:fields) = toIPv6Octets $ fromAddress ip
+          fst3 (x, _, _) = x
+          collapse idx (s, i, z) x | z && x == 0 = (s,                            i+1, True)
+                                   | i == idx    = (s . showChar ':',             i+1, True)
+                                   | otherwise   = (s . showChar ':' . showHex x, i+1, False)
 
--- |Same as 'intercalate' but for 'ShowS' as opposed to plain strings.
-intercalates :: ShowS -> [ShowS] -> ShowS
-intercalates _ []     = showString ""
-intercalates d (x:xs) = foldl (\s x -> s . d . x) x xs
+-- |Find the longest, consecutive, occurance of an element within
+-- a list.
+indexOfLongestSequence :: (Eq a) => a -> [a] -> Maybe Int
+indexOfLongestSequence x xs = case m of
+    0 -> Nothing
+    _ -> fmap (\x -> x - m + 1) $ findIndex (== m) ms
+    where m  = maximum ms
+          ms = drop 1 $ scanl (\c y -> if y == x then c + 1 else 0) 0 xs
 
 -- |Split a number into 'IPv6' word16s.
 toIPv6Octets :: Integral a => a -> [a]
