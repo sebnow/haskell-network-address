@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Main where
 import Control.DeepSeq (NFData, rnf)
 import Criterion.Main
@@ -17,19 +18,17 @@ ipv4str n = "192.168." ++ show (n `div` 255)
                        ++ "."
                        ++ show (n `mod` 255)
 
-ipv4 :: IPv4
-ipv4 = toAddress 3232235777
 
-ipv6 :: IPv6
-ipv6 = toAddress 42540766452641154071740215577757643572
-
-ipv4subnet :: IPSubnet IPv4
-ipv4subnet = IPSubnet ipv4 (toMask (8 :: Int))
-
-ipv6subnet :: IPSubnet IPv6
-ipv6subnet = IPSubnet ipv6 (toMask (56 :: Integer))
-
-main = defaultMain
+main =
+    let ipv4 :: IPv4
+        !ipv4 = toAddress 3232235777
+        ipv6 :: IPv6
+        !ipv6 = toAddress 42540766452641154071740215577757643572
+        ipv4subnet :: IPSubnet IPv4
+        !ipv4subnet = IPSubnet ipv4 (toMask (8 :: Int))
+        ipv6subnet :: IPSubnet IPv6
+        !ipv6subnet = IPSubnet ipv6 (toMask (56 :: Integer))
+    in  defaultMain
     [ bgroup "IPv4"
         [ bench "readAddress" $ nf (readAddress :: String -> IPv4) "192.168.1.1"
         , bench "showAddress" $ nf showAddress ipv4
