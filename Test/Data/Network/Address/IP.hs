@@ -71,9 +71,6 @@ tests = [ testGroup "IPv4"
                 [ testProperty "Symmetric IPv6 Read/Show" prop_subnet_ipv6_symmetric_readable
                 ]
             ]
-        , testGroup "Netmask"
-            [ testProperty "Symmetric toMask/fromMask" prop_mask_tofrom
-            ]
         ]
 
 readAddressMaybe :: Address a => String -> Maybe a
@@ -146,9 +143,4 @@ prop_subnet_ipv6_invalid_reads = prop_subnet_invalid_reads
 
 prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 -> String -> Property
 prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
-
-prop_mask_tofrom :: Mask32 -> Bool
-prop_mask_tofrom x = (fromMask m :: Word32) == (fromIntegral . getMask32) x
-    where m = (toMask . getMask32) x :: Word32
-
 
