@@ -175,13 +175,13 @@ readpIPv6 :: ReadP IPv6
 readpIPv6 = fmap (toAddress . word16sToInteger) $ choice
     [ liftM2 (:) readHexP (count 7 (char ':' >> readHexP))
     , do
-       a <- upTo1 6 (readHexP <<* char ':')
-       c <- upTo1 (8 - length a) (char ':' >> readHexP)
+       a <- upTo1 7 (readHexP <<* char ':')
+       c <- choice [ upTo1 (8 - length a) (char ':' >> readHexP)
+                   , char ':' >> return []
+                   ]
        let b = replicate (8 - (length a + length c)) 0
        return $ a ++ b ++ c
     , char ':' >> upTo1 7 (char ':' >> readHexP)
-    , upTo1 7 (readHexP <<* char ':') <<* char ':' >>= \xs ->
-        return (xs ++ replicate (8 - length xs) 0)
     , string "::" >> return [0]
     ]
 
