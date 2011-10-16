@@ -40,7 +40,7 @@ module Data.Network.Address.IP (
     toMask,
 ) where
 
-import Control.Monad (when)
+import Control.Monad (liftM2)
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
 import Data.List (foldl', findIndex, isSuffixOf, scanl)
@@ -173,25 +173,26 @@ readsIPv6 = readP_to_S readpIPv6
 -- |An IPv6 parser.
 readpIPv6 :: ReadP IPv6
 readpIPv6 = fmap (toAddress . word16sToInteger) $ choice
-    [ readHexP >>= \o -> count 7 (char ':' >> readHexP) >>= \os -> return (o:os)
+    [ liftM2 (:) readHexP (count 7 (char ':' >> readHexP))
     , do
-       head <- many1 (readHexP <<* char ':')
-       tail <- many1 (char ':' >> readHexP)
-       let body = replicate (8 - (length head + length tail)) 0
-           os   = head ++ body ++ tail
-       case length os of
-           8 -> return os
-           _ -> pfail
-    , char ':' >> many1 (char ':' >> readHexP) >>= \xs ->
-        if   length xs <= 8
-        then return xs
-        else pfail
+       a <- upTo1 6 (readHexP <<* char ':')
+       c <- upTo1 (8 - length a) (char ':' >> readHexP)
+       let b = replicate (8 - (length a + length c)) 0
+       return $ a ++ b ++ c
+    , char ':' >> upTo1 7 (char ':' >> readHexP)
+    , upTo1 7 (readHexP <<* char ':') <<* char ':' >>= \xs ->
+        return (xs ++ replicate (8 - length xs) 0)
     , string "::" >> return [0]
-    , many1 (readHexP <<* char ':') <<* char ':' >>= \xs ->
-        if   length xs > 8
-        then pfail
-        else return (xs ++ replicate (8 - length xs) 0)
     ]
+
+-- |@upTo n p@ parses zero or up to @n@ occurrances of @p@.
+upTo :: Int -> ReadP a -> ReadP [a]
+upTo n p | n <= 0    = return []
+         | otherwise = return [] +++ upTo1 n p
+
+-- |@upTo n p@ parses one or up to @n@ occurrances of @p@.
+upTo1 :: Int -> ReadP a -> ReadP [a]
+upTo1 n p = liftM2 (:) p (upTo (n - 1) p)
 
 infixl 4 <<*
 -- |Monad version of 'Applicative's '<*' operator.
