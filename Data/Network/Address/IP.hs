@@ -120,6 +120,12 @@ instance Address IPv4 where
     readsAddress = readsIPv4
     showAddress ip = showsIPv4 ip ""
 
+instance Address Word32 where
+    fromAddress = toInteger
+    toAddress = fromInteger
+    readsAddress = map (\(IPv4 x, s) -> (x, s)) . readsIPv4
+    showAddress ip = showsIPv4 (IPv4 ip) ""
+
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
 showsIPv4 :: IPv4 -> ShowS
@@ -164,6 +170,12 @@ instance Address IPv6 where
     toAddress   = toIPv6
     readsAddress = readsIPv6
     showAddress ip = showsIPv6 ip ""
+
+instance Address (Word32, Word32, Word32, Word32) where
+    fromAddress = fromHostAddress6
+    toAddress = toHostAddress6
+    readsAddress = map (\(ip, s) -> ((toHostAddress6 . fromAddress) ip, s)) . readsIPv6
+    showAddress = showAddress . toIPv6 . fromAddress
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
@@ -249,6 +261,23 @@ fromIPv6 :: IPv6 -> Integer
 fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
     where a' = fromIntegral a
           b' = fromIntegral b
+
+-- |Convert the byte representation to an 'HostAddress6' IP address.
+toHostAddress6 :: Integer -> (Word32, Word32, Word32, Word32)
+toHostAddress6 x = (a, b, c, d)
+    where ( _, a) = shift32 r1
+          (r1, b) = shift32 r2
+          (r2, c) = shift32 r3
+          (r3, d) = shift32 x
+          shift32 x = divMod (fromIntegral x) (2 ^ 32)
+
+-- |Return the byte representation of a 'HostAddress6' IP address.
+fromHostAddress6 :: (Word32, Word32, Word32, Word32) -> Integer
+fromHostAddress6 (a, b, c, d) = (a' `shift` 96) + (b' `shift` 64) + (c' `shift` 32) + d'
+    where a' = fromIntegral a
+          b' = fromIntegral b
+          c' = fromIntegral c
+          d' = fromIntegral d
 
 --
 -- Subnet
