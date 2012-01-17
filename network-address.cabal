@@ -50,7 +50,7 @@ Executable benchmark
     Build-depends:
       base == 4.*,
       Cabal >= 1.9.2 && < 1.11,
-      criterion == 0.5.0.*,
+      criterion >= 0.5.0.0 && < 0.7.0.0,
       deepseq == 1.1.0.*
   else
     Buildable:      False
