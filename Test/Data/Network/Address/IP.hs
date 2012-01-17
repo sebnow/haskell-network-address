@@ -2,6 +2,7 @@
 module Test.Data.Network.Address.IP (tests) where
 import Data.Bits (shift)
 import Data.Char (isDigit, isHexDigit)
+import Data.LargeWord
 import Data.List (intercalate, isPrefixOf)
 import Data.Network.Address.IP
 import Data.Word
@@ -25,13 +26,13 @@ instance Arbitrary IPv6 where
         b <- arbitrary :: Gen Word64
         return . toAddress . toInteger $ (a `shift` 64) + b
 
-instance Arbitrary (IPSubnet IPv4) where
+instance Arbitrary (IPSubnet IPv4 Word32) where
     arbitrary = do
         ip <- arbitrary :: Gen IPv4
         size <- arbitrary :: Gen Mask32
         return . readSubnet $ showAddress ip ++ "/" ++ show (getMask32 size)
 
-instance Arbitrary (IPSubnet IPv6) where
+instance Arbitrary (IPSubnet IPv6 Word128) where
     arbitrary = do
         ip <- arbitrary :: Gen IPv6
         size <- arbitrary :: Gen Mask128
@@ -105,7 +106,7 @@ prop_ipv4_invalid_reads :: IPv4 -> String -> Property
 prop_ipv4_invalid_reads a x = length x > 0 && (not . isDigit . head $ x)
     ==> (a, x) `elem` (readsAddress $ (showAddress a) ++ x)
 
-prop_subnet_ipv4_symmetric_readable :: IPSubnet IPv4 -> Bool
+prop_subnet_ipv4_symmetric_readable :: IPSubnet IPv4 Word32 -> Bool
 prop_subnet_ipv4_symmetric_readable subnet = (readSubnet . showSubnet) subnet == id subnet
 
 prop_ipv6_symmetric_readable :: IPv6 -> Bool
@@ -138,13 +139,13 @@ prop_subnet_invalid_reads :: (Address a, Subnet s a, Eq s) => s -> String -> Pro
 prop_subnet_invalid_reads s x = length x > 0 && (not . isDigit . head $ x)
     ==> (s, x) `elem` (readsSubnet $ (showSubnet s) ++ x)
 
-prop_subnet_ipv6_symmetric_readable :: IPSubnet IPv6 -> Bool
+prop_subnet_ipv6_symmetric_readable :: IPSubnet IPv6 Word128 -> Bool
 prop_subnet_ipv6_symmetric_readable subnet = (readSubnet . showSubnet) subnet == id subnet
 
-prop_subnet_ipv6_invalid_reads :: IPSubnet IPv6 -> String -> Property
+prop_subnet_ipv6_invalid_reads :: IPSubnet IPv6 Word128 -> String -> Property
 prop_subnet_ipv6_invalid_reads = prop_subnet_invalid_reads
 
-prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 -> String -> Property
+prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 Word32 -> String -> Property
 prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
 
 prop_mask_tofrom :: Mask32 -> Bool

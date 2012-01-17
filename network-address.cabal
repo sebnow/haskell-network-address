@@ -29,7 +29,8 @@ Library
 
   Build-depends:
     base == 4.*,
-    Cabal >= 1.9.2 && < 1.11
+    Cabal >= 1.9.2 && < 1.11,
+    largeword == 1.0.*
 
 test-suite test-package
   Type:           exitcode-stdio-1.0
@@ -40,6 +41,7 @@ test-suite test-package
     base == 4.*,
     Cabal >= 1.9.2 && < 1.11,
     QuickCheck == 2.4.*,
+    largeword == 1.0.*,
     test-framework == 0.4.*,
     test-framework-quickcheck2 == 0.2.*
 
@@ -51,7 +53,8 @@ Executable benchmark
       base == 4.*,
       Cabal >= 1.9.2 && < 1.11,
       criterion >= 0.5.0.0 && < 0.7.0.0,
-      deepseq == 1.1.0.*
+      deepseq == 1.1.0.*,
+      largeword == 1.0.*
   else
     Buildable:      False
 

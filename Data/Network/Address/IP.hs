@@ -26,14 +26,16 @@ SOFTWARE.
     Portability: unportable
 -}
 
-{-# LANGUAGE FlexibleInstances, FunctionalDependencies, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 module Data.Network.Address.IP (
     Address(..),
     Subnet(..),
     IPv4(..),
     IPv6(..),
     IPSubnet(..),
-    Mask,
     fromMask,
     readAddress,
     readSubnet,
@@ -43,6 +45,7 @@ module Data.Network.Address.IP (
 import Control.Monad (liftM2)
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
+import Data.LargeWord
 import Data.List (foldl', findIndex, isSuffixOf, scanl)
 import Data.Maybe (fromJust)
 import Data.Word
@@ -50,9 +53,6 @@ import Numeric (showHex)
 import Text.ParserCombinators.ReadP
 import Text.Printf (printf)
 import Text.Read.Lex (readDecP, readHexP)
-
--- |The byte representation of an IP network mask.
-type Mask = Integer
 
 -- |The abstract data structure to represent an IPv4 address.
 data IPv4 = IPv4 !Word32
@@ -62,8 +62,12 @@ data IPv4 = IPv4 !Word32
 data IPv6 = IPv6 !Word64 !Word64
             deriving (Eq, Ord, Show, Read)
 
+instance Bounded IPv6 where
+    minBound = IPv6 0 0
+    maxBound = IPv6 m m where m = maxBound :: Word64
+
 -- |The abstract data structure to represent an IP subnetwork.
-data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
+data (Address a) => IPSubnet a m = IPSubnet a m deriving (Eq, Ord, Show, Read)
 
 class (Eq a) => Address a where
     -- |Convert the byte representation to an IP 'Address'.
@@ -82,6 +86,8 @@ class (Eq a) => Address a where
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
 class (Address a) => Subnet s a | s -> a where
+    -- |The byte representation of an IP network mask.
+    type Mask a
     -- |Parse a textual representation of a 'Subnet'.
     readsSubnet :: ReadS s
     -- |Return a conanical textual representation of a 'Subnet'.
@@ -89,10 +95,9 @@ class (Address a) => Subnet s a | s -> a where
     -- |Return the first 'IP' in the 'Subnet'.
     base       :: s -> a
     -- |Return an binary representation of the subnet mask.
-    netmask    :: s -> Mask
+    netmask    :: s -> Mask a
     -- |Determine if an 'IP' is within the range of a 'Subnet'.
     member     :: a -> s -> Bool
-    member ip s = fromAddress ip .&. netmask s == fromAddress (base s)
 
 -- |@readAddress s@ parses an 'Address'. The 'String' @s@ must be
 -- completely consumed.
@@ -264,12 +269,12 @@ fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
 
 -- |Convert the byte representation to an 'HostAddress6' IP address.
 toHostAddress6 :: Integer -> (Word32, Word32, Word32, Word32)
-toHostAddress6 x = (a, b, c, d)
+toHostAddress6 x = (fromIntegral a, fromIntegral b, fromIntegral c, fromIntegral d)
     where ( _, a) = shift32 r1
           (r1, b) = shift32 r2
           (r2, c) = shift32 r3
           (r3, d) = shift32 x
-          shift32 x = divMod (fromIntegral x) (2 ^ 32)
+          shift32 x = divMod x (2 ^ 32)
 
 -- |Return the byte representation of a 'HostAddress6' IP address.
 fromHostAddress6 :: (Word32, Word32, Word32, Word32) -> Integer
@@ -283,34 +288,38 @@ fromHostAddress6 (a, b, c, d) = (a' `shift` 96) + (b' `shift` 64) + (c' `shift` 
 -- Subnet
 --
 
-instance Subnet (IPSubnet IPv4) IPv4 where
+instance Subnet (IPSubnet IPv4 Word32) IPv4 where
+    type Mask IPv4 = Word32
     showSubnet s = showsIPv4Subnet s ""
     readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
+    member (IPv4 a) (IPSubnet (IPv4 b) m) = a .&. m == b
 
-instance Subnet (IPSubnet IPv6) IPv6 where
+instance Subnet (IPSubnet IPv6 Word128) IPv6 where
+    type Mask IPv6 = Word128
     showSubnet s = showsIPv6Subnet s ""
     readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
+    member a (IPSubnet b m) = fromAddress a .&. toInteger m == fromAddress b
 
 -- |Create an 'IPv4Subnet' data structure.
-ipSubnet :: (Address a) => a -> Mask -> IPSubnet a
+ipSubnet :: (Address a, Bits m, Integral m) => a -> m -> IPSubnet a m
 ipSubnet ip m = IPSubnet (maskAddress ip m) m
 
 -- |Return a conanical textual representation of an IPv4 'Address' and
 -- 'Subnet'.
-showsIPv4Subnet :: IPSubnet IPv4 -> ShowS
+showsIPv4Subnet :: IPSubnet IPv4 Word32 -> ShowS
 showsIPv4Subnet (IPSubnet ip m) = showsIPv4 ip . showChar '/' . shows n
     where n = fromMask m :: Integer
 
 -- |Parse a textual representation of an IPv4 address and subnet.
-readsIPv4Subnet :: ReadS (IPSubnet IPv4)
+readsIPv4Subnet :: ReadS (IPSubnet IPv4 Word32)
 readsIPv4Subnet = readP_to_S readpIPv4Subnet
 
 -- |Return an IPv4 subnet parser.
-readpIPv4Subnet :: ReadP (IPSubnet IPv4)
+readpIPv4Subnet :: ReadP (IPSubnet IPv4 Word32)
 readpIPv4Subnet = do
     ip <- readpIPv4
     _ <- char '/'
@@ -319,28 +328,33 @@ readpIPv4Subnet = do
 
 -- |Return a conanical textual representation of an IPv6 'Address' and
 -- 'Subnet'.
-showsIPv6Subnet :: IPSubnet IPv6 -> ShowS
+showsIPv6Subnet :: IPSubnet IPv6 Word128 -> ShowS
 showsIPv6Subnet (IPSubnet ip m) = showsIPv6 ip . showChar '/' . shows n
     where n = fromMask m :: Integer
 
 -- |Parse a textual representation of an IPv6 address and subnet.
-readsIPv6Subnet :: ReadS (IPSubnet IPv6)
+readsIPv6Subnet :: ReadS (IPSubnet IPv6 Word128)
 readsIPv6Subnet = readP_to_S readpIPv6Subnet
 
 -- |Return an IPv6 subnet parser.
-readpIPv6Subnet :: ReadP (IPSubnet IPv6)
+readpIPv6Subnet :: ReadP (IPSubnet IPv6 Word128)
 readpIPv6Subnet = do
     ip <- readpIPv6
     _ <- char '/'
     m <- readDecP :: ReadP Int
     if 0 <= m && m <= 128 then return (ipSubnet ip (toMask m)) else pfail
 
--- |Convert a decimal mask to binary (e.g. 8 -> 1111.0000.0000.0000).
-toMask :: (Integral a, Bits a, Integral b, Bits b) => a -> b
-toMask size | size > 0  = complement (2^size - 1)
-            | otherwise = complement 0
+-- |Convert a decimal mask to binary
+-- (e.g. 8 -> 11111111.00000000.00000000.00000000).
+toMask :: (Integral a, Bits a, Integral b, Bits b, Bounded b) => a -> b
+toMask size = mask
+    where mask | size > 0  = complement (2^(bits - size) - 1)
+               | otherwise = maxb
+          bits = fromIntegral $ timesDivisible maxb 2
+          maxb = maxBound `asTypeOf` mask
 
--- |Convert a binary mask to decimal (e.g. 1111.0000.0000.0000 -> 8).
+-- |Convert a binary mask to decimal
+-- (e.g. 11111111.00000000.00000000.00000000 -> 8).
 fromMask :: (Integral a, Bits a, Integral b) => a -> b
 fromMask m = timesDivisible (fromIntegral . complement $ m) 2
 
