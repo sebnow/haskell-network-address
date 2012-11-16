@@ -40,10 +40,10 @@ module Data.Network.Address.IP (
     toMask,
 ) where
 
-import Control.Monad (liftM2)
+import Control.Monad (when)
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
-import Data.List (foldl', findIndex, isSuffixOf, scanl)
+import Data.List (foldl', intercalate, findIndex, groupBy)
 import Data.Maybe (fromJust)
 import Data.Word
 import Numeric (showHex)
@@ -62,8 +62,9 @@ data IPv4 = IPv4 !Word32
 data IPv6 = IPv6 !Word64 !Word64
             deriving (Eq, Ord, Show, Read)
 
+-- |The abstract data structure to represent an IPv4 subnetwork.
 -- |The abstract data structure to represent an IP subnetwork.
-data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
+data IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
 
 class (Eq a) => Address a where
     -- |Convert the byte representation to an IP 'Address'.
@@ -76,8 +77,8 @@ class (Eq a) => Address a where
     showAddress :: a -> String
     -- |Apply a mask to an 'Address'.
     maskAddress :: (Bits b, Integral b) => a -> b -> a
-    maskAddress ip mask = toAddress . (\x -> x `div` (2^n) * 2^n) . fromAddress $ ip
-        where n = fromMask mask
+    maskAddress ip mask = toAddress . (\x -> shiftL (shiftR x n) n) . fromAddress $ ip
+        where n = 32 - (fromMask mask)
 
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
@@ -104,7 +105,7 @@ readAddress s = case [x | (x, "") <- readsAddress s] of
 
 -- |@readSubnet s@ parses a 'Subnet'. The 'String' @s@ must be
 -- completely consumed.
-readSubnet :: (Subnet s a) => String -> s
+readSubnet :: (Address a, Subnet s a) => String -> s
 readSubnet s = case [x | (x, "") <- readsSubnet s] of
     [ip] -> ip
     []   -> error "readSubnet: no parse"
@@ -118,21 +119,12 @@ instance Address IPv4 where
     fromAddress (IPv4 x) = toInteger x
     toAddress   = IPv4 . fromInteger
     readsAddress = readsIPv4
-    showAddress ip = showsIPv4 ip ""
-
-instance Address Word32 where
-    fromAddress = toInteger
-    toAddress = fromInteger
-    readsAddress = map (\(IPv4 x, s) -> (x, s)) . readsIPv4
-    showAddress ip = showsIPv4 (IPv4 ip) ""
+    showAddress = showIPv4
 
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
-showsIPv4 :: IPv4 -> ShowS
-showsIPv4 (IPv4 ip) = shows a
-     . showChar '.' . shows b
-     . showChar '.' . shows c
-     . showChar '.' . shows d
+showIPv4 :: IPv4 -> String
+showIPv4 (IPv4 ip) = printf "%d.%d.%d.%d" a b c d
     where ( _, a) = shift8 r1
           (r1, b) = shift8 r2
           (r2, c) = shift8 r3
@@ -169,13 +161,7 @@ instance Address IPv6 where
     fromAddress = fromIPv6
     toAddress   = toIPv6
     readsAddress = readsIPv6
-    showAddress ip = showsIPv6 ip ""
-
-instance Address (Word32, Word32, Word32, Word32) where
-    fromAddress = fromHostAddress6
-    toAddress = toHostAddress6
-    readsAddress = map (\(ip, s) -> ((toHostAddress6 . fromAddress) ip, s)) . readsIPv6
-    showAddress = showAddress . toIPv6 . fromAddress
+    showAddress = showIPv6
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
@@ -184,64 +170,55 @@ readsIPv6 = readP_to_S readpIPv6
 
 -- |An IPv6 parser.
 readpIPv6 :: ReadP IPv6
-readpIPv6 = fmap (toAddress . word16sToInteger) $ choice
-    [ liftM2 (:) readHexP (count 7 (char ':' >> readHexP))
+readpIPv6 = fmap (toAddress . octetsToInteger) $ choice
+    [ readHexP >>= \o -> count 7 (char ':' >> readHexP) >>= \os -> return (o:os)
     , do
-       a <- upTo1 7 (readHexP <<* char ':')
-       c <- choice [ upTo1 (8 - length a) (char ':' >> readHexP)
-                   , char ':' >> return []
-                   ]
-       let b = replicate (8 - (length a + length c)) 0
-       return $ a ++ b ++ c
-    , char ':' >> upTo1 7 (char ':' >> readHexP)
+       head <- many1 (readHexP <<* char ':')
+       tail <- many1 (char ':' >> readHexP)
+       let body = replicate (8 - (length head + length tail)) 0
+           os   = head ++ body ++ tail
+       case length os of
+           8 -> return os
+           _ -> pfail
+    , char ':' >> many1 (char ':' >> readHexP) >>= \xs ->
+        if   length xs <= 8
+        then return xs
+        else pfail
     , string "::" >> return [0]
+    , many1 (readHexP <<* char ':') <<* char ':' >>= \xs ->
+        if   length xs > 8
+        then pfail
+        else return (xs ++ replicate (8 - length xs) 0)
     ]
-
--- |@upTo n p@ parses zero or up to @n@ occurrances of @p@.
-upTo :: Int -> ReadP a -> ReadP [a]
-upTo n p | n <= 0    = return []
-         | otherwise = return [] +++ upTo1 n p
-
--- |@upTo n p@ parses one or up to @n@ occurrances of @p@.
-upTo1 :: Int -> ReadP a -> ReadP [a]
-upTo1 n p = liftM2 (:) p (upTo (n - 1) p)
 
 infixl 4 <<*
 -- |Monad version of 'Applicative's '<*' operator.
 (<<*) :: Monad m => m a -> m b -> m a
 a <<* b = a >>= (b >>) . return
 
-word16sToInteger :: [Word16] -> Integer
-word16sToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
+octetsToInteger :: [Word16] -> Integer
+octetsToInteger = foldl' (\x y -> (x `shift` 16) + fromIntegral y) 0
 
 -- |Return a conanical textual representation of an 'IPv6' IP address,
 -- e.g. @fedc:ba98:7654:3210:fedc:ba98:7654:3210@
-showsIPv6 :: IPv6 -> ShowS
-showsIPv6 ip | fromAddress ip == 0 = showString "::"
-             | otherwise           = case indexOfLongestSequence 0 word16s of
-    Nothing  -> foldl' (\s x -> s . showChar ':' . showHex x) (showHex field) fields
-    Just idx -> if   idx == 0
-                then fst3 $ foldl' (collapse idx) (showString "", 0, False) word16s
-                else fst3 (foldl' (collapse idx) (showHex field, 1, False) fields) .
-                    if   replicate (length word16s - idx) 0 `isSuffixOf` word16s
-                    then showChar ':'
-                    else id
-    where word16s@(field:fields) = toIPv6Octets $ fromAddress ip
-          fst3 (x, _, _) = x
-          collapse idx (s, i, z) x | z && x == 0 = (s,                            i+1, True)
-                                   | i == idx    = (s . showChar ':',             i+1, True)
-                                   | otherwise   = (s . showChar ':' . showHex x, i+1, False)
+showIPv6 :: IPv6 -> String
+showIPv6 ip = intercalate ":" fields
+    where fields  = if   m == 1
+                    then map (`showHex` "") octets
+                    else (init ++ [""] ++ tail)
+          init    = if   i == 0
+                    then [""]
+                    else map (`showHex` "") . concat . take i $ grouped
+          tail    = if   i == (length lengths - 1)
+                    then [""]
+                    else map (`showHex` "") . concat . drop (i + 1) $ grouped
+          i       = fromJust $ findIndex (== m) lengths
+          m       = maximum lengths
+          lengths = map length grouped
+          grouped = groupBy (\x y -> x == 0 && y == 0) octets
+          octets  = toIPv6Octets . fromAddress $ ip
 
--- |Find the longest, consecutive, occurance of an element within
--- a list.
-indexOfLongestSequence :: (Eq a) => a -> [a] -> Maybe Int
-indexOfLongestSequence x xs = case m of
-    0 -> Nothing
-    _ -> fmap (\x -> x - m + 1) $ findIndex (== m) ms
-    where m  = maximum ms
-          ms = drop 1 $ scanl (\c y -> if y == x then c + 1 else 0) 0 xs
-
--- |Split a number into 'IPv6' word16s.
+-- |Split a number into 'IPv6' octets.
 toIPv6Octets :: Integral a => a -> [a]
 toIPv6Octets = fill . reverse . go
     where fill os = replicate (8 - length os) 0 ++ os
@@ -262,35 +239,18 @@ fromIPv6 (IPv6 a b) = (a' `shift` 64) + b'
     where a' = fromIntegral a
           b' = fromIntegral b
 
--- |Convert the byte representation to an 'HostAddress6' IP address.
-toHostAddress6 :: Integer -> (Word32, Word32, Word32, Word32)
-toHostAddress6 x = (a, b, c, d)
-    where ( _, a) = shift32 r1
-          (r1, b) = shift32 r2
-          (r2, c) = shift32 r3
-          (r3, d) = shift32 x
-          shift32 x = divMod (fromIntegral x) (2 ^ 32)
-
--- |Return the byte representation of a 'HostAddress6' IP address.
-fromHostAddress6 :: (Word32, Word32, Word32, Word32) -> Integer
-fromHostAddress6 (a, b, c, d) = (a' `shift` 96) + (b' `shift` 64) + (c' `shift` 32) + d'
-    where a' = fromIntegral a
-          b' = fromIntegral b
-          c' = fromIntegral c
-          d' = fromIntegral d
-
 --
 -- Subnet
 --
 
 instance Subnet (IPSubnet IPv4) IPv4 where
-    showSubnet s = showsIPv4Subnet s ""
+    showSubnet = showIPSubnet
     readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
 
 instance Subnet (IPSubnet IPv6) IPv6 where
-    showSubnet s = showsIPv6Subnet s ""
+    showSubnet = showIPSubnet
     readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
     netmask (IPSubnet _ m) = m
@@ -299,11 +259,10 @@ instance Subnet (IPSubnet IPv6) IPv6 where
 ipSubnet :: (Address a) => a -> Mask -> IPSubnet a
 ipSubnet ip m = IPSubnet (maskAddress ip m) m
 
--- |Return a conanical textual representation of an IPv4 'Address' and
+-- |Return a conanical textual representation of an IP 'Address' and
 -- 'Subnet'.
-showsIPv4Subnet :: IPSubnet IPv4 -> ShowS
-showsIPv4Subnet (IPSubnet ip m) = showsIPv4 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
+showIPSubnet :: (Address a) => IPSubnet a -> String
+showIPSubnet (IPSubnet ip mask) = showAddress ip ++ "/" ++ show (fromMask mask :: Integer)
 
 -- |Parse a textual representation of an IPv4 address and subnet.
 readsIPv4Subnet :: ReadS (IPSubnet IPv4)
@@ -316,12 +275,6 @@ readpIPv4Subnet = do
     _ <- char '/'
     m <- readDecP :: ReadP Word32
     if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
-
--- |Return a conanical textual representation of an IPv6 'Address' and
--- 'Subnet'.
-showsIPv6Subnet :: IPSubnet IPv6 -> ShowS
-showsIPv6Subnet (IPSubnet ip m) = showsIPv6 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
 
 -- |Parse a textual representation of an IPv6 address and subnet.
 readsIPv6Subnet :: ReadS (IPSubnet IPv6)
