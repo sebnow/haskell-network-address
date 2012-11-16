@@ -1,5 +1,5 @@
-Name:                network-address
-Version:             0.2.0
+name:                network-address
+version:             0.2.1
 Synopsis:            IP data structures and textual representation
 Description:         A library for parsing, representing, computing and
                      transforming network addresses such a IPv4, IPv6
@@ -12,46 +12,9 @@ Maintainer:          sebnow@gmail.com
 Category:            Data, Network
 Build-type:          Simple
 Extra-source-files:  README.md
-Cabal-version:       >=1.9.2
+cabal-version:       >=1.8
 
-Source-Repository head
-    type:       git
-    location:   git://github.com/sebnow/haskell-network-address.git
-
-Flag benchmark
-  Description:  Build benchmarking 
-  Default:      False
-
-Library
-  Exposed-modules:
-    Data.Network.Address
-    Data.Network.Address.IP
-
-  Build-depends:
-    base == 4.*,
-    Cabal >= 1.9.2 && < 1.15
-
-test-suite test-package
-  Type:           exitcode-stdio-1.0
-  Main-is:        Test.hs
-  Other-modules:
-    Test.Data.Network.Address.IP
-  Build-depends:
-    base == 4.*,
-    Cabal >= 1.9.2 && < 1.11,
-    QuickCheck == 2.4.*,
-    test-framework == 0.4.*,
-    test-framework-quickcheck2 == 0.2.*
-
-Executable benchmark
-  Main-is:          Benchmark.hs
-  if flag(benchmark)
-    Buildable:      True
-    Build-depends:
-      base == 4.*,
-      Cabal >= 1.9.2 && < 1.11,
-      criterion >= 0.5.0.0 && < 0.7.0.0,
-      deepseq == 1.1.0.*
-  else
-    Buildable:      False
-
+library
+  exposed-modules:     Data.Network.Address, Data.Network.Address.IP
+  -- other-modules:       
+  build-depends:       base ==4.*, deepseq ==1.3.*, QuickCheck ==2.*

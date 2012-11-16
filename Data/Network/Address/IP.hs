@@ -63,6 +63,7 @@ data IPv6 = IPv6 !Word64 !Word64
             deriving (Eq, Ord, Show, Read)
 
 -- |The abstract data structure to represent an IPv4 subnetwork.
+-- |The abstract data structure to represent an IP subnetwork.
 data IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
 
 class (Eq a) => Address a where
