@@ -19,7 +19,7 @@ Source-Repository head
     location:   git://github.com/sebnow/haskell-network-address.git
 
 Flag benchmark
-  Description:  Build benchmarking 
+  Description:  Build benchmarking
   Default:      False
 
 Library
@@ -29,7 +29,7 @@ Library
 
   Build-depends:
     base == 4.*,
-    Cabal >= 1.9.2 && < 1.15
+    Cabal >= 1.9.2 && < 1.17
 
 test-suite test-package
   Type:           exitcode-stdio-1.0
@@ -49,9 +49,8 @@ Executable benchmark
     Buildable:      True
     Build-depends:
       base == 4.*,
-      Cabal >= 1.9.2 && < 1.11,
+      Cabal >= 1.9.2 && < 1.17,
       criterion >= 0.5.0.0 && < 0.7.0.0,
       deepseq == 1.1.0.*
   else
     Buildable:      False
-
