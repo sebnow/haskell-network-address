@@ -34,10 +34,10 @@ module Data.Network.Address.IP (
     IPv6(..),
     IPSubnet(..),
     Mask,
-    fromMask,
+    Prefix,
     readAddress,
     readSubnet,
-    toMask,
+    ipSubnetForPrefix
 ) where
 
 import Control.Monad (liftM2)
@@ -53,6 +53,7 @@ import Text.Read.Lex (readDecP, readHexP)
 
 -- |The byte representation of an IP network mask.
 type Mask = Integer
+type Prefix = Integer
 
 -- |The abstract data structure to represent an IPv4 address.
 data IPv4 = IPv4 !Word32
@@ -63,7 +64,7 @@ data IPv6 = IPv6 !Word64 !Word64
             deriving (Eq, Ord, Show, Read)
 
 -- |The abstract data structure to represent an IP subnetwork.
-data (Address a) => IPSubnet a = IPSubnet a Mask deriving (Eq, Ord, Show, Read)
+data (Address a) => IPSubnet a = IPSubnet a Prefix deriving (Eq, Ord, Show, Read)
 
 class (Eq a) => Address a where
     -- |Convert the byte representation to an IP 'Address'.
@@ -74,10 +75,14 @@ class (Eq a) => Address a where
     readsAddress :: ReadS a
     -- |Return a conanical textual representation of an IP 'Address'.
     showAddress :: a -> String
+
+    bitsAddress :: a -> Integer
     -- |Apply a mask to an 'Address'.
-    maskAddress :: (Bits b, Integral b) => a -> b -> a
-    maskAddress ip mask = toAddress . (\x -> x `div` (2^n) * 2^n) . fromAddress $ ip
-        where n = fromMask mask
+    maskAddressWithPrefix :: (Bits b, Integral b) => a -> b -> a
+    maskAddressWithPrefix ip p =
+      let bs = bitsAddress ip
+          block = 2^(bs - fromIntegral p)
+      in toAddress . (\x -> (x `div` block) * block) . fromAddress $ ip
 
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
@@ -119,12 +124,14 @@ instance Address IPv4 where
     toAddress   = IPv4 . fromInteger
     readsAddress = readsIPv4
     showAddress ip = showsIPv4 ip ""
+    bitsAddress _ = 32
 
 instance Address Word32 where
     fromAddress = toInteger
     toAddress = fromInteger
     readsAddress = map (\(IPv4 x, s) -> (x, s)) . readsIPv4
     showAddress ip = showsIPv4 (IPv4 ip) ""
+    bitsAddress _ = 32
 
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
@@ -170,12 +177,14 @@ instance Address IPv6 where
     toAddress   = toIPv6
     readsAddress = readsIPv6
     showAddress ip = showsIPv6 ip ""
+    bitsAddress _ = 128
 
 instance Address (Word32, Word32, Word32, Word32) where
     fromAddress = fromHostAddress6
     toAddress = toHostAddress6
     readsAddress = map (\(ip, s) -> ((toHostAddress6 . fromAddress) ip, s)) . readsIPv6
     showAddress = showAddress . toIPv6 . fromAddress
+    bitsAddress _ = 128
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
@@ -287,23 +296,27 @@ instance Subnet (IPSubnet IPv4) IPv4 where
     showSubnet s = showsIPv4Subnet s ""
     readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
-    netmask (IPSubnet _ m) = m
+    netmask (IPSubnet a p) = prefixToMask a p
 
 instance Subnet (IPSubnet IPv6) IPv6 where
     showSubnet s = showsIPv6Subnet s ""
     readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
-    netmask (IPSubnet _ m) = m
+    netmask (IPSubnet a p) = prefixToMask a p
+
+prefixToMask :: (Address a) => a -> Prefix -> Mask
+prefixToMask a p =
+  let bs = bitsAddress a
+  in (2^(p+1)-1) * 2^(bs-p)
 
 -- |Create an 'IPv4Subnet' data structure.
-ipSubnet :: (Address a) => a -> Mask -> IPSubnet a
-ipSubnet ip m = IPSubnet (maskAddress ip m) m
+ipSubnetForPrefix :: (Address a) => a -> Prefix -> IPSubnet a
+ipSubnetForPrefix ip p = IPSubnet (maskAddressWithPrefix ip p) p
 
 -- |Return a conanical textual representation of an IPv4 'Address' and
 -- 'Subnet'.
 showsIPv4Subnet :: IPSubnet IPv4 -> ShowS
-showsIPv4Subnet (IPSubnet ip m) = showsIPv4 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
+showsIPv4Subnet (IPSubnet ip p) = showsIPv4 ip . showChar '/' . shows p
 
 -- |Parse a textual representation of an IPv4 address and subnet.
 readsIPv4Subnet :: ReadS (IPSubnet IPv4)
@@ -314,14 +327,13 @@ readpIPv4Subnet :: ReadP (IPSubnet IPv4)
 readpIPv4Subnet = do
     ip <- readpIPv4
     _ <- char '/'
-    m <- readDecP :: ReadP Word32
-    if 0 <= m && m <= 32 then return (ipSubnet ip (toMask m)) else pfail
+    p <- readDecP :: ReadP Word32
+    if 0 <= p && p <= 32 then return (ipSubnetForPrefix ip (fromIntegral p)) else pfail
 
 -- |Return a conanical textual representation of an IPv6 'Address' and
 -- 'Subnet'.
 showsIPv6Subnet :: IPSubnet IPv6 -> ShowS
-showsIPv6Subnet (IPSubnet ip m) = showsIPv6 ip . showChar '/' . shows n
-    where n = fromMask m :: Integer
+showsIPv6Subnet (IPSubnet ip p) = showsIPv6 ip . showChar '/' . shows p
 
 -- |Parse a textual representation of an IPv6 address and subnet.
 readsIPv6Subnet :: ReadS (IPSubnet IPv6)
@@ -332,21 +344,6 @@ readpIPv6Subnet :: ReadP (IPSubnet IPv6)
 readpIPv6Subnet = do
     ip <- readpIPv6
     _ <- char '/'
-    m <- readDecP :: ReadP Int
-    if 0 <= m && m <= 128 then return (ipSubnet ip (toMask m)) else pfail
-
--- |Convert a decimal mask to binary (e.g. 8 -> 1111.0000.0000.0000).
-toMask :: (Integral a, Bits a, Integral b, Bits b) => a -> b
-toMask size | size > 0  = complement (2^size - 1)
-            | otherwise = complement 0
-
--- |Convert a binary mask to decimal (e.g. 1111.0000.0000.0000 -> 8).
-fromMask :: (Integral a, Bits a, Integral b) => a -> b
-fromMask m = timesDivisible (fromIntegral . complement $ m) 2
-
--- |Determine how many times a number is divisible by another number.
-timesDivisible :: (Integral a) => a -> a -> a
-timesDivisible a x = timesDivisible' a x 0
-    where timesDivisible' a x c | a > 0     = timesDivisible' (a `div` x) x (c + 1)
-                                | otherwise = c
+    p <- readDecP :: ReadP Int
+    if 0 <= p && p <= 128 then return (ipSubnetForPrefix ip (fromIntegral p)) else pfail
 
