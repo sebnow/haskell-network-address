@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Test.Data.Network.Address.IP (tests) where
-import Data.Bits (shift, shiftR, xor, (.&.))
+import Data.Bits (shift, shiftR, xor)
 import Data.Char (isDigit, isHexDigit)
 import Data.List (intercalate, isPrefixOf)
 import Data.Network.Address.IP
@@ -9,7 +10,7 @@ import Data.Word
 import Numeric (showHex)
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
-import Test.QuickCheck hiding ((.&.))
+import Test.QuickCheck
 import Test.QuickCheck.Arbitrary
 
 -- |Integral type for 32bit network masks (i.e. 0..32)
@@ -81,7 +82,7 @@ tests = [ testGroup "IPv4"
             , testGroup "Membership"
                 [ testProperty "Reflexivity" prop_reflexivityIPv6
                 , testProperty "Reflexivity for subnet" prop_reflexivityIPv6Subnet
-                , testProperty "BitsyContains" prop_bitsyContainsIPv4
+                , testProperty "BitsyContains" prop_bitsyContainsIPv6
                 , testProperty "Subnet below range" prop_subnetBelowRangeIPv6
                 , testProperty "Subnet above range" prop_subnetAboveRangeIPv6
                 ]
@@ -95,15 +96,6 @@ mostSignificantBit n
   where
     go !pos x
       | x == 1    = pos
-      | otherwise = go (pos + 1) (x `shiftR` 1)
-
-leastSignificantBit :: Integer -> Integer
-leastSignificantBit n
-    | n <= 0    = error "Non-positive integer provided"
-    | otherwise = go 0 n
-  where
-    go !pos x
-      | (x .&. 1) == 1    = pos
       | otherwise = go (pos + 1) (x `shiftR` 1)
 
 readAddressMaybe :: Address a => String -> Maybe a
@@ -209,22 +201,15 @@ prop_subnetBelowRangeIPv6 s@(IPSubnet a _) =
     fromAddress a > 0
     ==> not (member (toAddress . subtract 1 . fromAddress $ a) s)
 
--- TODO generalize above too
---
 prop_subnetAboveRangeIPv4 :: IPSubnet IPv4 -> Property
 prop_subnetAboveRangeIPv4 = prop_subnetAboveRange
 
 prop_subnetAboveRangeIPv6 :: IPSubnet IPv6 -> Property
 prop_subnetAboveRangeIPv6 = prop_subnetAboveRange
 
-prop_subnetAboveRange :: (Address a, Subnet s a) => s -> Property
-prop_subnetAboveRange s =
-    fromAddress a > 0 &&
-    fromAddress a < 2^(maxPrefix a) - 1
-    ==>
-    let lsb = leastSignificantBit (fromAddress a)
-        bump = 2^lsb
-    in not (member (toAddress . (+ bump) . fromAddress $ a) s)
+-- |The first address after the subnet is not a member.
+prop_subnetAboveRange :: Subnet (IPSubnet a) a => IPSubnet a -> Property
+prop_subnetAboveRange s@(IPSubnet a p) =
+    next < 2^(maxPrefix a) ==> not (member (toAddress next) s)
   where
-    a = base s
-
+    next = fromAddress a + 2^(maxPrefix a - p)
