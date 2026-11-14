@@ -66,6 +66,10 @@ tests = [ testGroup "IPv4"
                 , testProperty "Subnet above range" prop_subnetAboveRangeIPv4
                 , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv4
                 ]
+            , testGroup "Netmask"
+                [ testProperty "Leading prefix bits set" prop_netmaskIPv4
+                , testProperty "255.0.0.0 for /8" prop_netmaskSlash8
+                ]
             ]
         , testGroup "IPv6"
             [ testGroup "Read/Show"
@@ -88,6 +92,10 @@ tests = [ testGroup "IPv4"
                 , testProperty "Subnet below range" prop_subnetBelowRangeIPv6
                 , testProperty "Subnet above range" prop_subnetAboveRangeIPv6
                 , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv6
+                ]
+            , testGroup "Netmask"
+                [ testProperty "Leading prefix bits set" prop_netmaskIPv6
+                , testProperty "ffff:ffff:: for /32" prop_netmaskSlash32
                 ]
             ]
         ]
@@ -227,3 +235,22 @@ prop_prefixOutOfRange :: Address a => a -> Positive Integer -> Bool
 prop_prefixOutOfRange a (Positive d) =
     isNothing (ipSubnetForPrefix a (-d)) &&
     isNothing (ipSubnetForPrefix a (maxPrefix a + d))
+
+prop_netmaskIPv4 :: IPSubnet IPv4 -> Property
+prop_netmaskIPv4 = prop_netmask
+
+prop_netmaskIPv6 :: IPSubnet IPv6 -> Property
+prop_netmaskIPv6 = prop_netmask
+
+-- |The netmask has exactly the leading prefix bits set.
+prop_netmask :: Subnet (IPSubnet a) a => IPSubnet a -> Property
+prop_netmask s@(IPSubnet a p) =
+    fromAddress (netmask s) === 2^(maxPrefix a) - 2^(maxPrefix a - p)
+
+prop_netmaskSlash8 :: Property
+prop_netmaskSlash8 = once $
+    showAddress (netmask (readSubnet "10.1.2.3/8" :: IPSubnet IPv4)) === "255.0.0.0"
+
+prop_netmaskSlash32 :: Property
+prop_netmaskSlash32 = once $
+    showAddress (netmask (readSubnet "2001:db8::1/32" :: IPSubnet IPv6)) === "ffff:ffff::"

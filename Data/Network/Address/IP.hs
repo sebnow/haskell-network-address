@@ -33,7 +33,6 @@ module Data.Network.Address.IP (
     IPv4(..),
     IPv6(..),
     IPSubnet(..),
-    Mask,
     Prefix,
     readAddress,
     readSubnet,
@@ -51,8 +50,6 @@ import Text.ParserCombinators.ReadP
 import Text.Printf (printf)
 import Text.Read.Lex (readDecP, readHexP)
 
--- |The byte representation of an IP network mask.
-type Mask = Integer
 -- |The number of leading bits that identify a network, e.g. the 8 in
 -- @10.0.0.0/8@.
 type Prefix = Integer
@@ -80,12 +77,6 @@ class (Eq a) => Address a where
     -- |Return the largest 'Prefix' for an IP 'Address', which is its
     -- length in bits. The argument is not evaluated.
     maxPrefix   :: a -> Prefix
-    -- |Apply a mask to an 'Address'.
-    maskAddressWithPrefix :: (Bits b, Integral b) => a -> b -> a
-    maskAddressWithPrefix ip p =
-      let bs = maxPrefix ip
-          block = 2^(bs - fromIntegral p)
-      in toAddress . (\x -> (x `div` block) * block) . fromAddress $ ip
 
 -- |The 'Subnet' class is used to perform operations on and manipulate
 -- IP subnetworks.
@@ -96,11 +87,17 @@ class (Address a) => Subnet s a | s -> a where
     showSubnet :: s -> String
     -- |Return the first 'IP' in the 'Subnet'.
     base       :: s -> a
-    -- |Return an binary representation of the subnet mask.
-    netmask    :: s -> Mask
+    -- |Return the 'Prefix' length of the 'Subnet'.
+    prefix     :: s -> Prefix
+    -- |Return the subnet mask as an 'Address', e.g. @255.0.0.0@ for
+    -- @10.0.0.0/8@.
+    netmask    :: s -> a
+    netmask s = toAddress $ prefixMask (maxPrefix (base s)) (prefix s)
     -- |Determine if an 'IP' is within the range of a 'Subnet'.
     member     :: a -> s -> Bool
-    member ip s = fromAddress ip .&. netmask s == fromAddress (base s)
+    member ip s = networkBits ip == networkBits (base s)
+        where networkBits x = fromAddress x `shiftR` hostBits
+              hostBits = fromInteger $ maxPrefix ip - prefix s
 
 -- |@readAddress s@ parses an 'Address'. The 'String' @s@ must be
 -- completely consumed.
@@ -299,26 +296,28 @@ instance Subnet (IPSubnet IPv4) IPv4 where
     showSubnet s = showsIPv4Subnet s ""
     readsSubnet = readsIPv4Subnet
     base (IPSubnet b _) = b
-    netmask (IPSubnet a p) = prefixToMask a p
+    prefix (IPSubnet _ p) = p
 
 instance Subnet (IPSubnet IPv6) IPv6 where
     showSubnet s = showsIPv6Subnet s ""
     readsSubnet = readsIPv6Subnet
     base (IPSubnet b _) = b
-    netmask (IPSubnet a p) = prefixToMask a p
+    prefix (IPSubnet _ p) = p
 
-prefixToMask :: (Address a) => a -> Prefix -> Mask
-prefixToMask a p =
-  let bs = maxPrefix a
-  in (2^(p+1)-1) * 2^(bs-p)
+-- |Return the byte representation of the mask for a 'Prefix', given the
+-- 'maxPrefix' of the address.
+prefixMask :: Prefix -> Prefix -> Integer
+prefixMask maxP p = (2^p - 1) * 2^(maxP - p)
 
 -- |Create an 'IPSubnet' containing an 'Address', clearing the host bits
 -- so the base is the first address in the subnet. Return 'Nothing' if
 -- the 'Prefix' is not between 0 and the 'maxPrefix' of the 'Address'.
 ipSubnetForPrefix :: (Address a) => a -> Prefix -> Maybe (IPSubnet a)
 ipSubnetForPrefix ip p
-    | 0 <= p && p <= maxPrefix ip = Just $ IPSubnet (maskAddressWithPrefix ip p) p
-    | otherwise                   = Nothing
+    | 0 <= p && p <= maxP = Just $ IPSubnet b p
+    | otherwise           = Nothing
+    where maxP = maxPrefix ip
+          b = toAddress $ fromAddress ip .&. prefixMask maxP p
 
 -- |Return a conanical textual representation of an IPv4 'Address' and
 -- 'Subnet'.
