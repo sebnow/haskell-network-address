@@ -53,6 +53,8 @@ import Text.Read.Lex (readDecP, readHexP)
 
 -- |The byte representation of an IP network mask.
 type Mask = Integer
+-- |The number of leading bits that identify a network, e.g. the 8 in
+-- @10.0.0.0/8@.
 type Prefix = Integer
 
 -- |The abstract data structure to represent an IPv4 address.
@@ -75,12 +77,13 @@ class (Eq a) => Address a where
     readsAddress :: ReadS a
     -- |Return a conanical textual representation of an IP 'Address'.
     showAddress :: a -> String
-
-    bitsAddress :: a -> Integer
+    -- |Return the largest 'Prefix' for an IP 'Address', which is its
+    -- length in bits. The argument is not evaluated.
+    maxPrefix   :: a -> Prefix
     -- |Apply a mask to an 'Address'.
     maskAddressWithPrefix :: (Bits b, Integral b) => a -> b -> a
     maskAddressWithPrefix ip p =
-      let bs = bitsAddress ip
+      let bs = maxPrefix ip
           block = 2^(bs - fromIntegral p)
       in toAddress . (\x -> (x `div` block) * block) . fromAddress $ ip
 
@@ -124,14 +127,14 @@ instance Address IPv4 where
     toAddress   = IPv4 . fromInteger
     readsAddress = readsIPv4
     showAddress ip = showsIPv4 ip ""
-    bitsAddress _ = 32
+    maxPrefix _ = 32
 
 instance Address Word32 where
     fromAddress = toInteger
     toAddress = fromInteger
     readsAddress = map (\(IPv4 x, s) -> (x, s)) . readsIPv4
     showAddress ip = showsIPv4 (IPv4 ip) ""
-    bitsAddress _ = 32
+    maxPrefix _ = 32
 
 -- |Return a conanical textual representation of an IPv4 IP address,
 -- e.g. @127.0.0.1@
@@ -177,14 +180,14 @@ instance Address IPv6 where
     toAddress   = toIPv6
     readsAddress = readsIPv6
     showAddress ip = showsIPv6 ip ""
-    bitsAddress _ = 128
+    maxPrefix _ = 128
 
 instance Address (Word32, Word32, Word32, Word32) where
     fromAddress = fromHostAddress6
     toAddress = toHostAddress6
     readsAddress = map (\(ip, s) -> ((toHostAddress6 . fromAddress) ip, s)) . readsIPv6
     showAddress = showAddress . toIPv6 . fromAddress
-    bitsAddress _ = 128
+    maxPrefix _ = 128
 
 -- |Parse a textual representation of an 'IPv6' IP address,
 -- e.g. @1080:0:0:0:8:800:200C:417A@
@@ -306,7 +309,7 @@ instance Subnet (IPSubnet IPv6) IPv6 where
 
 prefixToMask :: (Address a) => a -> Prefix -> Mask
 prefixToMask a p =
-  let bs = bitsAddress a
+  let bs = maxPrefix a
   in (2^(p+1)-1) * 2^(bs-p)
 
 -- |Create an 'IPv4Subnet' data structure.

@@ -192,12 +192,12 @@ prop_reflexivityIPv6Subnet s@(IPSubnet a _) = property $ member a s
 prop_bitsyContainsIPv4 :: IPv4 ->  IPSubnet IPv4 -> Property
 prop_bitsyContainsIPv4 a s@(IPSubnet sa p) =
     let xed = fromAddress a `xor` fromAddress sa
-    in (xed == 0 || mostSignificantBit xed < bitsAddress a - p) === member a s
+    in (xed == 0 || mostSignificantBit xed < maxPrefix a - p) === member a s
 
 prop_bitsyContainsIPv6 :: IPv6 ->  IPSubnet IPv6 -> Property
 prop_bitsyContainsIPv6 a s@(IPSubnet sa p) =
     let xed = fromAddress a `xor` fromAddress sa
-    in (xed == 0 || mostSignificantBit xed < bitsAddress a - p) === member a s
+    in (xed == 0 || mostSignificantBit xed < maxPrefix a - p) === member a s
 
 prop_subnetBelowRangeIPv4 :: IPSubnet IPv4 -> Property
 prop_subnetBelowRangeIPv4 s@(IPSubnet a _) =
@@ -220,7 +220,7 @@ prop_subnetAboveRangeIPv6 = prop_subnetAboveRange
 prop_subnetAboveRange :: (Address a, Subnet s a) => s -> Property
 prop_subnetAboveRange s =
     fromAddress a > 0 &&
-    fromAddress a < 2^(bitsAddress a) - 1
+    fromAddress a < 2^(maxPrefix a) - 1
     ==>
     let lsb = leastSignificantBit (fromAddress a)
         bump = 2^lsb
