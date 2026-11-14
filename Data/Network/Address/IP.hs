@@ -312,9 +312,13 @@ prefixToMask a p =
   let bs = maxPrefix a
   in (2^(p+1)-1) * 2^(bs-p)
 
--- |Create an 'IPv4Subnet' data structure.
-ipSubnetForPrefix :: (Address a) => a -> Prefix -> IPSubnet a
-ipSubnetForPrefix ip p = IPSubnet (maskAddressWithPrefix ip p) p
+-- |Create an 'IPSubnet' containing an 'Address', clearing the host bits
+-- so the base is the first address in the subnet. Return 'Nothing' if
+-- the 'Prefix' is not between 0 and the 'maxPrefix' of the 'Address'.
+ipSubnetForPrefix :: (Address a) => a -> Prefix -> Maybe (IPSubnet a)
+ipSubnetForPrefix ip p
+    | 0 <= p && p <= maxPrefix ip = Just $ IPSubnet (maskAddressWithPrefix ip p) p
+    | otherwise                   = Nothing
 
 -- |Return a conanical textual representation of an IPv4 'Address' and
 -- 'Subnet'.
@@ -330,8 +334,8 @@ readpIPv4Subnet :: ReadP (IPSubnet IPv4)
 readpIPv4Subnet = do
     ip <- readpIPv4
     _ <- char '/'
-    p <- readDecP :: ReadP Word32
-    if 0 <= p && p <= 32 then return (ipSubnetForPrefix ip (fromIntegral p)) else pfail
+    p <- readDecP
+    maybe pfail return $ ipSubnetForPrefix ip p
 
 -- |Return a conanical textual representation of an IPv6 'Address' and
 -- 'Subnet'.
@@ -347,6 +351,6 @@ readpIPv6Subnet :: ReadP (IPSubnet IPv6)
 readpIPv6Subnet = do
     ip <- readpIPv6
     _ <- char '/'
-    p <- readDecP :: ReadP Int
-    if 0 <= p && p <= 128 then return (ipSubnetForPrefix ip (fromIntegral p)) else pfail
+    p <- readDecP
+    maybe pfail return $ ipSubnetForPrefix ip p
 

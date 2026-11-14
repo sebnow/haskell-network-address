@@ -5,6 +5,7 @@ module Test.Data.Network.Address.IP (tests) where
 import Data.Bits (shift, shiftR, xor)
 import Data.Char (isDigit, isHexDigit)
 import Data.List (intercalate, isPrefixOf)
+import Data.Maybe (isNothing)
 import Data.Network.Address.IP
 import Data.Word
 import Numeric (showHex)
@@ -63,6 +64,7 @@ tests = [ testGroup "IPv4"
                 , testProperty "BitsyContains" prop_bitsyContainsIPv4
                 , testProperty "Subnet below range" prop_subnetBelowRangeIPv4
                 , testProperty "Subnet above range" prop_subnetAboveRangeIPv4
+                , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv4
                 ]
             ]
         , testGroup "IPv6"
@@ -85,6 +87,7 @@ tests = [ testGroup "IPv4"
                 , testProperty "BitsyContains" prop_bitsyContainsIPv6
                 , testProperty "Subnet below range" prop_subnetBelowRangeIPv6
                 , testProperty "Subnet above range" prop_subnetAboveRangeIPv6
+                , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv6
                 ]
             ]
         ]
@@ -170,13 +173,13 @@ prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 -> String -> Property
 prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
 
 prop_reflexivityIPv4 :: IPv4 -> IPSubnet IPv4 -> Property
-prop_reflexivityIPv4 addr (IPSubnet _ p) = property $ member addr (ipSubnetForPrefix addr p)
+prop_reflexivityIPv4 addr (IPSubnet _ p) = property $ maybe False (member addr) (ipSubnetForPrefix addr p)
 
 prop_reflexivityIPv4Subnet :: IPSubnet IPv4 -> Property
 prop_reflexivityIPv4Subnet s@(IPSubnet a _) = property $ member a s
 
 prop_reflexivityIPv6 :: IPv6 -> IPSubnet IPv6 -> Property
-prop_reflexivityIPv6 addr (IPSubnet _ p) = property $ member addr (ipSubnetForPrefix addr p)
+prop_reflexivityIPv6 addr (IPSubnet _ p) = property $ maybe False (member addr) (ipSubnetForPrefix addr p)
 
 prop_reflexivityIPv6Subnet :: IPSubnet IPv6 -> Property
 prop_reflexivityIPv6Subnet s@(IPSubnet a _) = property $ member a s
@@ -213,3 +216,14 @@ prop_subnetAboveRange s@(IPSubnet a p) =
     next < 2^(maxPrefix a) ==> not (member (toAddress next) s)
   where
     next = fromAddress a + 2^(maxPrefix a - p)
+
+prop_prefixOutOfRangeIPv4 :: IPv4 -> Positive Integer -> Bool
+prop_prefixOutOfRangeIPv4 = prop_prefixOutOfRange
+
+prop_prefixOutOfRangeIPv6 :: IPv6 -> Positive Integer -> Bool
+prop_prefixOutOfRangeIPv6 = prop_prefixOutOfRange
+
+prop_prefixOutOfRange :: Address a => a -> Positive Integer -> Bool
+prop_prefixOutOfRange a (Positive d) =
+    isNothing (ipSubnetForPrefix a (-d)) &&
+    isNothing (ipSubnetForPrefix a (maxPrefix a + d))
