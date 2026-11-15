@@ -17,14 +17,16 @@ Usage
     "127.0.0.1"
     *Data.Network.Address> let subnet = readSubnet "192.168.1.42/8" :: IPSubnet IPv4
     *Data.Network.Address> subnet
-    IPSubnet (IPv4 3232235776) (-256)
+    IPSubnet (IPv4 3221225472) 8
     *Data.Network.Address> showSubnet subnet
-    "192.168.1.0/8"
+    "192.0.0.0/8"
     *Data.Network.Address> showAddress . base $ subnet
-    "192.168.1.0"
-    *Data.Network.Address> (readAddress "192.168.1.5" :: IPv4) `member` subnet
-    True
+    "192.0.0.0"
+    *Data.Network.Address> showAddress . netmask $ subnet
+    "255.0.0.0"
     *Data.Network.Address> (readAddress "192.168.2.5" :: IPv4) `member` subnet
+    True
+    *Data.Network.Address> (readAddress "10.0.0.1" :: IPv4) `member` subnet
     False
     *Data.Network.Address> let ip = readAddress "2001:db8:0:0:0::1" :: IPv6
     *Data.Network.Address> ip
