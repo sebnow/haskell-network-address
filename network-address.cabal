@@ -16,7 +16,7 @@ Cabal-version:       >=1.9.2
 
 Source-Repository head
     type:       git
-    location:   git://github.com/sebnow/haskell-network-address.git
+    location:   https://github.com/sebnow/haskell-network-address.git
 
 Flag benchmark
   Description:  Build benchmarking
