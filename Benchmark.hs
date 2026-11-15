@@ -13,11 +13,6 @@ instance NFData IPv6 where
 instance (Address a, NFData a) => NFData (IPSubnet a) where
     rnf (IPSubnet ip m) = rnf ip `seq` rnf m
 
-ipv4str :: Integral a => a -> String
-ipv4str n = "192.168." ++ show (n `div` 255)
-                       ++ "."
-                       ++ show (n `mod` 255)
-
 
 main =
     let ipv4 :: IPv4
