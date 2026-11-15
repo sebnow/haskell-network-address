@@ -1,8 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Test.Data.Network.Address.IP (tests) where
-import Data.Bits (shift)
+import Data.Bits (shift, shiftR, xor)
 import Data.Char (isDigit, isHexDigit)
 import Data.List (intercalate, isPrefixOf)
+import Data.Maybe (isNothing)
 import Data.Network.Address.IP
 import Data.Word
 import Numeric (showHex)
@@ -12,9 +15,9 @@ import Test.QuickCheck
 import Test.QuickCheck.Arbitrary
 
 -- |Integral type for 32bit network masks (i.e. 0..32)
-newtype Mask32 = Mask32 {getMask32 :: Word8} deriving (Show, Read)
+newtype Prefix32 = Prefix32 {getPrefix32 :: Word8} deriving (Show, Read)
 
-newtype Mask128 = Mask128 {getMask128 :: Word8} deriving (Show, Read)
+newtype Prefix128 = Prefix128 {getPrefix128 :: Word8} deriving (Show, Read)
 
 instance Arbitrary IPv4 where
     arbitrary = fmap (toAddress . toInteger) (arbitrary :: Gen Word32)
@@ -28,20 +31,20 @@ instance Arbitrary IPv6 where
 instance Arbitrary (IPSubnet IPv4) where
     arbitrary = do
         ip <- arbitrary :: Gen IPv4
-        size <- arbitrary :: Gen Mask32
-        return . readSubnet $ showAddress ip ++ "/" ++ show (getMask32 size)
+        size <- arbitrary :: Gen Prefix32
+        return . readSubnet $ showAddress ip ++ "/" ++ show (getPrefix32 size)
 
 instance Arbitrary (IPSubnet IPv6) where
     arbitrary = do
         ip <- arbitrary :: Gen IPv6
-        size <- arbitrary :: Gen Mask128
-        return . readSubnet $ showAddress ip ++ "/" ++ show (getMask128 size)
+        size <- arbitrary :: Gen Prefix128
+        return . readSubnet $ showAddress ip ++ "/" ++ show (getPrefix128 size)
 
-instance Arbitrary Mask32 where
-    arbitrary = fmap (Mask32 . fromIntegral) (choose (0, 32) :: Gen Int)
+instance Arbitrary Prefix32 where
+    arbitrary = fmap (Prefix32 . fromIntegral) (choose (0, 32) :: Gen Int)
 
-instance Arbitrary Mask128 where
-    arbitrary = fmap (Mask128 . fromIntegral) (choose (0, 128) :: Gen Int)
+instance Arbitrary Prefix128 where
+    arbitrary = fmap (Prefix128 . fromIntegral) (choose (0, 128) :: Gen Int)
 
 tests = [ testGroup "IPv4"
             [ testGroup "Read/Show"
@@ -54,6 +57,18 @@ tests = [ testGroup "IPv4"
                 ]
             , testGroup "Subnet"
                 [ testProperty "Symmetric IPv4 Read/Show" prop_subnet_ipv4_symmetric_readable
+                ]
+            , testGroup "Membership"
+                [ testProperty "Reflexivity" prop_reflexivityIPv4
+                , testProperty "Reflexivity for subnet" prop_reflexivityIPv4Subnet
+                , testProperty "BitsyContains" prop_bitsyContainsIPv4
+                , testProperty "Subnet below range" prop_subnetBelowRangeIPv4
+                , testProperty "Subnet above range" prop_subnetAboveRangeIPv4
+                , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv4
+                ]
+            , testGroup "Netmask"
+                [ testProperty "Leading prefix bits set" prop_netmaskIPv4
+                , testProperty "255.0.0.0 for /8" prop_netmaskSlash8
                 ]
             ]
         , testGroup "IPv6"
@@ -70,11 +85,29 @@ tests = [ testGroup "IPv4"
             , testGroup "Subnet"
                 [ testProperty "Symmetric IPv6 Read/Show" prop_subnet_ipv6_symmetric_readable
                 ]
-            ]
-        , testGroup "Netmask"
-            [ testProperty "Symmetric toMask/fromMask" prop_mask_tofrom
+            , testGroup "Membership"
+                [ testProperty "Reflexivity" prop_reflexivityIPv6
+                , testProperty "Reflexivity for subnet" prop_reflexivityIPv6Subnet
+                , testProperty "BitsyContains" prop_bitsyContainsIPv6
+                , testProperty "Subnet below range" prop_subnetBelowRangeIPv6
+                , testProperty "Subnet above range" prop_subnetAboveRangeIPv6
+                , testProperty "Prefix out of range" prop_prefixOutOfRangeIPv6
+                ]
+            , testGroup "Netmask"
+                [ testProperty "Leading prefix bits set" prop_netmaskIPv6
+                , testProperty "ffff:ffff:: for /32" prop_netmaskSlash32
+                ]
             ]
         ]
+
+mostSignificantBit :: Integer -> Integer
+mostSignificantBit n
+    | n <= 0    = error "Non-positive integer provided"
+    | otherwise = go 0 n
+  where
+    go !pos x
+      | x == 1    = pos
+      | otherwise = go (pos + 1) (x `shiftR` 1)
 
 readAddressMaybe :: Address a => String -> Maybe a
 readAddressMaybe s = case [x | (x, "") <- readsAddress s] of
@@ -147,8 +180,77 @@ prop_subnet_ipv6_invalid_reads = prop_subnet_invalid_reads
 prop_subnet_ipv4_invalid_reads :: IPSubnet IPv4 -> String -> Property
 prop_subnet_ipv4_invalid_reads = prop_subnet_invalid_reads
 
-prop_mask_tofrom :: Mask32 -> Bool
-prop_mask_tofrom x = (fromMask m :: Word32) == (fromIntegral . getMask32) x
-    where m = (toMask . getMask32) x :: Word32
+prop_reflexivityIPv4 :: IPv4 -> IPSubnet IPv4 -> Property
+prop_reflexivityIPv4 addr (IPSubnet _ p) = property $ maybe False (member addr) (ipSubnetForPrefix addr p)
 
+prop_reflexivityIPv4Subnet :: IPSubnet IPv4 -> Property
+prop_reflexivityIPv4Subnet s@(IPSubnet a _) = property $ member a s
 
+prop_reflexivityIPv6 :: IPv6 -> IPSubnet IPv6 -> Property
+prop_reflexivityIPv6 addr (IPSubnet _ p) = property $ maybe False (member addr) (ipSubnetForPrefix addr p)
+
+prop_reflexivityIPv6Subnet :: IPSubnet IPv6 -> Property
+prop_reflexivityIPv6Subnet s@(IPSubnet a _) = property $ member a s
+
+prop_bitsyContainsIPv4 :: IPv4 ->  IPSubnet IPv4 -> Property
+prop_bitsyContainsIPv4 a s@(IPSubnet sa p) =
+    let xed = fromAddress a `xor` fromAddress sa
+    in (xed == 0 || mostSignificantBit xed < maxPrefix a - p) === member a s
+
+prop_bitsyContainsIPv6 :: IPv6 ->  IPSubnet IPv6 -> Property
+prop_bitsyContainsIPv6 a s@(IPSubnet sa p) =
+    let xed = fromAddress a `xor` fromAddress sa
+    in (xed == 0 || mostSignificantBit xed < maxPrefix a - p) === member a s
+
+prop_subnetBelowRangeIPv4 :: IPSubnet IPv4 -> Property
+prop_subnetBelowRangeIPv4 s@(IPSubnet a _) =
+    fromAddress a > 0
+    ==> not (member (toAddress . subtract 1 . fromAddress $ a) s)
+
+prop_subnetBelowRangeIPv6 :: IPSubnet IPv6 -> Property
+prop_subnetBelowRangeIPv6 s@(IPSubnet a _) =
+    fromAddress a > 0
+    ==> not (member (toAddress . subtract 1 . fromAddress $ a) s)
+
+prop_subnetAboveRangeIPv4 :: IPSubnet IPv4 -> Property
+prop_subnetAboveRangeIPv4 = prop_subnetAboveRange
+
+prop_subnetAboveRangeIPv6 :: IPSubnet IPv6 -> Property
+prop_subnetAboveRangeIPv6 = prop_subnetAboveRange
+
+-- |The first address after the subnet is not a member.
+prop_subnetAboveRange :: Subnet (IPSubnet a) a => IPSubnet a -> Property
+prop_subnetAboveRange s@(IPSubnet a p) =
+    next < 2^(maxPrefix a) ==> not (member (toAddress next) s)
+  where
+    next = fromAddress a + 2^(maxPrefix a - p)
+
+prop_prefixOutOfRangeIPv4 :: IPv4 -> Positive Integer -> Bool
+prop_prefixOutOfRangeIPv4 = prop_prefixOutOfRange
+
+prop_prefixOutOfRangeIPv6 :: IPv6 -> Positive Integer -> Bool
+prop_prefixOutOfRangeIPv6 = prop_prefixOutOfRange
+
+prop_prefixOutOfRange :: Address a => a -> Positive Integer -> Bool
+prop_prefixOutOfRange a (Positive d) =
+    isNothing (ipSubnetForPrefix a (-d)) &&
+    isNothing (ipSubnetForPrefix a (maxPrefix a + d))
+
+prop_netmaskIPv4 :: IPSubnet IPv4 -> Property
+prop_netmaskIPv4 = prop_netmask
+
+prop_netmaskIPv6 :: IPSubnet IPv6 -> Property
+prop_netmaskIPv6 = prop_netmask
+
+-- |The netmask has exactly the leading prefix bits set.
+prop_netmask :: Subnet (IPSubnet a) a => IPSubnet a -> Property
+prop_netmask s@(IPSubnet a p) =
+    fromAddress (netmask s) === 2^(maxPrefix a) - 2^(maxPrefix a - p)
+
+prop_netmaskSlash8 :: Property
+prop_netmaskSlash8 = once $
+    showAddress (netmask (readSubnet "10.1.2.3/8" :: IPSubnet IPv4)) === "255.0.0.0"
+
+prop_netmaskSlash32 :: Property
+prop_netmaskSlash32 = once $
+    showAddress (netmask (readSubnet "2001:db8::1/32" :: IPSubnet IPv6)) === "ffff:ffff::"
